@@ -1,4 +1,6 @@
 # Python dependencies for Classroom Reservation Application (Team Vibranium)
+Flask>=3.0.0
+flask-cors>=4.0.0
 openpyxl>=3.1.2
 flake8>=7.0.0
 coverage>=7.4.0

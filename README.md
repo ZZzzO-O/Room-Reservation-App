@@ -15,6 +15,7 @@
 The **Classroom Reservation Application** streamlines semester classroom planning at CMKL University. It manages room capacities, specialized equipment attributes, closures/renovations, and conflict-free reservations for up to 50 competencies per semester.
 
 ### Key Capabilities
+- **Authentication & RBAC**: Secure credential verification with role segregation (Staff vs Professor).
 - **Room Management**: Add, edit, and delete bookable rooms with capacity and equipment attributes.
 - **Availability & Closures**: Mark rooms unavailable during specific date ranges (e.g. renovations).
 - **Search & Filtering**: Filter rooms by group size, required equipment, and date ranges in optimal $O(n)$ time.
@@ -58,19 +59,32 @@ cd Room-Reservation-App
 pip install -r requirements.txt
 ```
 
-### 3. Run Unit Tests & Linting
-To verify the Room Service logic and test suite (44 tests):
+### 3. Start the API Gateway (Backend Server)
+```bash
+python ApiGateway/api_gateway.py
+```
+Server runs at `http://127.0.0.1:5000` with CORS enabled for the React frontend.
+
+---
+
+## Testing & Quality Assurance
+
+### Run All Unit Tests (86 tests across all services)
 ```bash
 python -m unittest discover -s RoomService
+python -m unittest discover -s AuthService
+python -m unittest discover -s ApiGateway
 ```
 
-To run lint checks against PEP 8 coding standards (79-character limit):
+### Run Coding Standard Lint Checks (PEP 8, 79-character limit)
 ```bash
-flake8 --max-line-length=79 RoomService
+flake8 --max-line-length=79 RoomService AuthService ApiGateway
 ```
 
-To run test coverage:
+### Run Test Coverage
 ```bash
 coverage run -m unittest discover -s RoomService
+coverage run -a -m unittest discover -s AuthService
+coverage run -a -m unittest discover -s ApiGateway
 coverage report -m
 ```

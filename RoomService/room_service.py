@@ -88,8 +88,6 @@ def validate_room_details(
 
 def get_room(rooms: Dict[str, Room], room_id: str) -> Room:
     """
-    Look up a room by id in O(1) time.
-
     Args:
         rooms (Dict[str, Room]): Room data keyed by room id.
         room_id (str): Id of the room to find.
@@ -113,8 +111,6 @@ def create_room(
     name: str = "",
 ) -> Room:
     """
-    Add a new room to the room data in O(1) time.
-
     Args:
         rooms (Dict[str, Room]): Room data keyed by room id.
         room_id (str): Unique id for the new room.
@@ -151,8 +147,6 @@ def edit_room(
     name: Optional[str] = None,
 ) -> Room:
     """
-    Change the capacity, equipment, or name of an existing room in O(1).
-
     Args:
         rooms (Dict[str, Room]): Room data keyed by room id.
         room_id (str): Id of the room to edit.
@@ -183,8 +177,6 @@ def edit_room(
 
 def delete_room(rooms: Dict[str, Room], room_id: str) -> None:
     """
-    Remove a room from the room data in O(1) time.
-
     Args:
         rooms (Dict[str, Room]): Room data keyed by room id.
         room_id (str): Id of the room to delete.
@@ -207,8 +199,6 @@ def mark_room_unavailable(
     reason: str = "",
 ) -> UnavailablePeriod:
     """
-    Mark a room as unavailable from a start date to an end date.
-
     Args:
         rooms (Dict[str, Room]): Room data keyed by room id.
         room_id (str): Id of the room to close.
@@ -335,8 +325,6 @@ def find_available_rooms(
     required_equipment: Optional[Dict[str, int]] = None,
 ) -> List[Room]:
     """
-    Filter rooms by capacity, equipment, and date range in O(n) time.
-
     Args:
         rooms (Dict[str, Room]): Room data keyed by room id.
         group_size (int): Number of students that must fit.
@@ -364,8 +352,6 @@ def recommend_room(
     required_equipment: Optional[Dict[str, int]] = None,
 ) -> Optional[Room]:
     """
-    Recommend the smallest matching room in a single O(n) pass.
-
     Uses min() with a generator to avoid the O(n log n) sorting cost
     and maintain O(1) auxiliary space. Ties are broken deterministically
     by room id.
