@@ -284,5 +284,63 @@ class TestSearchAndSeedEndpoints(ApiGatewayTestCase):
         self.assertEqual(rec["capacity"], 35)
 
 
+class TestSqlitePersistenceThroughGateway(unittest.TestCase):
+    """Test suite verifying persistence across simulated server restarts."""
+
+    def test_room_persists_across_app_recreation(self) -> None:
+        """Create room in instance 1 and verify it reloads in instance 2."""
+        import tempfile
+        import os
+
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+            tmp_db = tmp.name
+
+        try:
+            # Instance 1: Create room
+            app1 = create_app(db_path=tmp_db)
+            c1 = app1.test_client()
+
+            login_res = c1.post(
+                "/api/auth/login",
+                data=json.dumps({
+                    "email": "staff1@cmkl.ac.th",
+                    "password": "Test@1234",
+                }),
+                content_type="application/json",
+            )
+            token = login_res.get_json()["token"]
+            headers = {"Authorization": f"Bearer {token}"}
+
+            create_res = c1.post(
+                "/api/rooms",
+                headers=headers,
+                data=json.dumps({
+                    "room_id": "901",
+                    "capacity": 75,
+                    "name": "SuperLab",
+                }),
+                content_type="application/json",
+            )
+            self.assertEqual(create_res.status_code, 201)
+
+            # Instance 2: Simulate complete server reboot with new stores
+            app2 = create_app(db_path=tmp_db)
+            c2 = app2.test_client()
+
+            get_res = c2.get("/api/rooms/901", headers=headers)
+            self.assertEqual(get_res.status_code, 200)
+            data = get_res.get_json()["room"]
+            self.assertEqual(data["room_id"], "901")
+            self.assertEqual(data["name"], "SuperLab")
+            self.assertEqual(data["capacity"], 75)
+        finally:
+            if "app1" in locals() and getattr(app1, "conn", None):
+                app1.conn.close()
+            if "app2" in locals() and getattr(app2, "conn", None):
+                app2.conn.close()
+            if os.path.exists(tmp_db):
+                os.remove(tmp_db)
+
+
 if __name__ == "__main__":
     unittest.main()

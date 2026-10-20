@@ -6,6 +6,7 @@
 from datetime import date
 from functools import wraps
 from pathlib import Path
+import sqlite3
 import sys
 from typing import Any, Callable, Dict, Optional, Tuple
 
@@ -16,8 +17,10 @@ from flask_cors import CORS
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR / "RoomService"))
 sys.path.insert(0, str(BASE_DIR / "AuthService"))
+sys.path.insert(0, str(BASE_DIR / "Database"))
 
 import auth_service as auth  # noqa: E402
+import database as db  # noqa: E402
 import room_service as rs  # noqa: E402
 from seed_rooms import load_cmkl_rooms  # noqa: E402
 
@@ -68,14 +71,19 @@ def create_app(
     users: Optional[Dict[str, auth.User]] = None,
     sessions: Optional[Dict[str, auth.Session]] = None,
     rooms: Optional[Dict[str, rs.Room]] = None,
+    db_path: Optional[str] = None,
 ) -> Flask:
     """
     Application factory for the API Gateway and Network Service.
+
+    Supports optional SQLite database persistence for long-term storage
+    (retaining records across semesters / 4-year cycle).
 
     Args:
         users (Optional[Dict[str, auth.User]]): Pre-existing user store.
         sessions (Optional[Dict[str, auth.Session]]): Session store.
         rooms (Optional[Dict[str, rs.Room]]): Room data store.
+        db_path (Optional[str]): Path to SQLite database file or ':memory:'.
 
     Returns:
         Flask: Configured and route-registered Flask application.
@@ -83,16 +91,49 @@ def create_app(
     app = Flask(__name__)
     CORS(app)
 
-    # Initialize shared stores with defaults if not provided
-    app_users = {} if users is None else users
-    app_sessions = {} if sessions is None else sessions
-    app_rooms = {} if rooms is None else rooms
+    # Initialize SQLite connection if db_path or default standalone startup
+    conn: Optional[sqlite3.Connection] = None
+    target_db = db_path
+    if target_db is None and users is None and rooms is None:
+        target_db = str(BASE_DIR / db.DEFAULT_DB_FILE)
 
-    if not app_users:
-        auth.seed_default_users(app_users)
+    if target_db is not None:
+        conn = db.get_connection(target_db)
+        db.init_db(conn)
 
-    if rooms is None:
-        load_cmkl_rooms(app_rooms)
+    app.conn = conn  # type: ignore[attr-defined]
+
+    # Initialize shared stores
+    app_users: Dict[str, auth.User] = {} if users is None else users
+    app_sessions: Dict[str, auth.Session] = (
+        {} if sessions is None else sessions
+    )
+    app_rooms: Dict[str, rs.Room] = {} if rooms is None else rooms
+
+    # Load from or populate SQLite
+    if conn is not None:
+        loaded_users = db.load_users(conn)
+        if loaded_users:
+            app_users.update(loaded_users)
+        else:
+            auth.seed_default_users(app_users)
+            for u in app_users.values():
+                db.save_user(conn, u)
+
+        loaded_rooms = db.load_rooms(conn)
+        if loaded_rooms:
+            app_rooms.update(loaded_rooms)
+        else:
+            load_cmkl_rooms(app_rooms)
+            for r in app_rooms.values():
+                db.save_room(conn, r)
+
+        app_sessions.update(db.load_sessions(conn))
+    else:
+        if not app_users:
+            auth.seed_default_users(app_users)
+        if rooms is None:
+            load_cmkl_rooms(app_rooms)
 
     def get_token_from_header() -> Optional[str]:
         """Extract Bearer token from the Authorization header."""
@@ -138,11 +179,13 @@ def create_app(
     @app.route("/", methods=["GET"])
     def root() -> Tuple[Response, int]:
         """Root endpoint returning API status and endpoints directory."""
+        storage_type = "SQLite (app.db)" if conn else "In-Memory"
         return jsonify({
             "name": "CMKL Classroom Reservation API Gateway",
             "version": "1.0.0",
             "status": "online",
             "team": "Vibranium",
+            "storage": storage_type,
             "message": "API Gateway is running and ready for requests.",
             "endpoints": {
                 "auth": [
@@ -182,6 +225,9 @@ def create_app(
             user, session = auth.authenticate(
                 app_users, app_sessions, email, password
             )
+            if conn is not None:
+                db.save_session(conn, session)
+
             return jsonify({
                 "token": session.token,
                 "user": {
@@ -201,6 +247,8 @@ def create_app(
         """Revoke active session token."""
         token = get_token_from_header() or ""
         auth.terminate_session(app_sessions, token)
+        if conn is not None:
+            db.delete_session(conn, token)
         return jsonify({"message": "Logged out successfully."}), 200
 
     @app.route("/api/auth/me", methods=["GET"])
@@ -244,6 +292,9 @@ def create_app(
                 equipment=equipment,
                 name=name,
             )
+            if conn is not None:
+                db.save_room(conn, room)
+
             return jsonify({
                 "message": "Room created successfully.",
                 "room": room_to_dict(room),
@@ -280,6 +331,9 @@ def create_app(
                 equipment=equipment,
                 name=name,
             )
+            if conn is not None:
+                db.save_room(conn, room)
+
             return jsonify({
                 "message": "Room updated successfully.",
                 "room": room_to_dict(room),
@@ -298,6 +352,8 @@ def create_app(
         """Delete an existing room (Staff only)."""
         try:
             rs.delete_room(app_rooms, room_id)
+            if conn is not None:
+                db.delete_room(conn, room_id)
             return jsonify({"message": f"Room {room_id} deleted."}), 200
         except rs.RoomNotFoundError as err:
             return jsonify({"error": str(err)}), 404
@@ -321,6 +377,9 @@ def create_app(
             period = rs.mark_room_unavailable(
                 app_rooms, room_id, start_d, end_d, reason
             )
+            if conn is not None:
+                db.save_unavailable_period(conn, room_id, period)
+
             return jsonify({
                 "message": "Room marked unavailable.",
                 "unavailable_period": {
@@ -355,7 +414,6 @@ def create_app(
                 "error": "Valid group_size and YYYY-MM-DD dates required."
             }), 400
 
-        # Optional equipment query parameters
         req_equipment: Dict[str, int] = {}
         for key in ("projector", "mic", "whiteboard", "tv_screen"):
             val = request.args.get(key)
@@ -408,6 +466,10 @@ def create_app(
     def api_seed_rooms(user: auth.User) -> Tuple[Response, int]:
         """Seed official CMKL campus classrooms (Staff only)."""
         load_cmkl_rooms(app_rooms)
+        if conn is not None:
+            for r in app_rooms.values():
+                db.save_room(conn, r)
+
         return jsonify({
             "message": "Seeded official CMKL rooms.",
             "total_rooms": len(app_rooms),

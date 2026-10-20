@@ -8,6 +8,11 @@ __pycache__/
 htmlcov/
 .pytest_cache/
 
+# SQLite local databases (auto-created and seeded on startup)
+*.db
+*.sqlite
+*.sqlite3
+
 # Virtual Environments
 venv/
 .venv/
