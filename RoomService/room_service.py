@@ -26,7 +26,7 @@ class RoomNotFoundError(RoomError):
     """Raised when a room id does not exist."""
 
 
-@dataclass
+@dataclass(slots=True)
 class UnavailablePeriod:
     """A date range, inclusive at both ends, when a room cannot be used."""
 
@@ -35,12 +35,13 @@ class UnavailablePeriod:
     reason: str = ""
 
 
-@dataclass
+@dataclass(slots=True)
 class Room:
     """A bookable room with its capacity, equipment, and closures."""
 
     room_id: str
     capacity: int
+    name: str = ""
     equipment: Dict[str, int] = field(default_factory=dict)
     unavailable_periods: List[UnavailablePeriod] = field(
         default_factory=list
@@ -48,15 +49,19 @@ class Room:
 
 
 def validate_room_details(
-    room_id: str, capacity: int, equipment: Dict[str, int]
+    room_id: str,
+    capacity: int,
+    equipment: Dict[str, int],
+    name: str = "",
 ) -> None:
     """
     Check that room details are valid.
 
     Args:
-        room_id (str): Identifier of the room, such as "A101".
+        room_id (str): Identifier of the room, such as "601" or "A101".
         capacity (int): Maximum number of students the room holds.
         equipment (Dict[str, int]): Equipment name mapped to its count.
+        name (str): Optional human-readable room name (e.g., "Pioneer").
 
     Returns:
         None
@@ -64,14 +69,16 @@ def validate_room_details(
     Raises:
         InvalidRoomError: If any detail is not valid.
     """
-    if not room_id or not room_id.strip():
+    if not isinstance(room_id, str) or not room_id.strip():
         raise InvalidRoomError("Room id must not be empty.")
     if isinstance(capacity, bool) or not isinstance(capacity, int):
         raise InvalidRoomError("Capacity must be a whole number.")
     if capacity < MIN_CAPACITY:
         raise InvalidRoomError("Capacity must be at least 1.")
-    for name, count in equipment.items():
-        if not name.strip():
+    if not isinstance(name, str):
+        raise InvalidRoomError("Room name must be a string.")
+    for item_name, count in equipment.items():
+        if not isinstance(item_name, str) or not item_name.strip():
             raise InvalidRoomError("Equipment name must not be empty.")
         if isinstance(count, bool) or not isinstance(count, int):
             raise InvalidRoomError("Equipment count must be a number.")
@@ -81,7 +88,7 @@ def validate_room_details(
 
 def get_room(rooms: Dict[str, Room], room_id: str) -> Room:
     """
-    Look up a room by id.
+    Look up a room by id in O(1) time.
 
     Args:
         rooms (Dict[str, Room]): Room data keyed by room id.
@@ -103,15 +110,17 @@ def create_room(
     room_id: str,
     capacity: int,
     equipment: Optional[Dict[str, int]] = None,
+    name: str = "",
 ) -> Room:
     """
-    Add a new room to the room data.
+    Add a new room to the room data in O(1) time.
 
     Args:
         rooms (Dict[str, Room]): Room data keyed by room id.
         room_id (str): Unique id for the new room.
         capacity (int): Maximum number of students the room holds.
         equipment (Optional[Dict[str, int]]): Equipment name to count.
+        name (str): Optional name of the room (e.g., "Pioneer").
 
     Returns:
         Room: The room that was created.
@@ -120,11 +129,16 @@ def create_room(
         InvalidRoomError: If any detail is not valid.
         DuplicateRoomError: If the room id is already used.
     """
-    equipment = dict(equipment or {})
-    validate_room_details(room_id, capacity, equipment)
+    clean_equipment = dict(equipment or {})
+    validate_room_details(room_id, capacity, clean_equipment, name)
     if room_id in rooms:
         raise DuplicateRoomError(f"Room {room_id} already exists.")
-    room = Room(room_id=room_id, capacity=capacity, equipment=equipment)
+    room = Room(
+        room_id=room_id,
+        capacity=capacity,
+        name=name,
+        equipment=clean_equipment,
+    )
     rooms[room_id] = room
     return room
 
@@ -134,9 +148,10 @@ def edit_room(
     room_id: str,
     capacity: Optional[int] = None,
     equipment: Optional[Dict[str, int]] = None,
+    name: Optional[str] = None,
 ) -> Room:
     """
-    Change the capacity and/or equipment of an existing room.
+    Change the capacity, equipment, or name of an existing room in O(1).
 
     Args:
         rooms (Dict[str, Room]): Room data keyed by room id.
@@ -144,6 +159,7 @@ def edit_room(
         capacity (Optional[int]): New capacity, or None to keep it.
         equipment (Optional[Dict[str, int]]): New equipment, or None to
             keep it. When given, it replaces the old equipment.
+        name (Optional[str]): New room name, or None to keep it.
 
     Returns:
         Room: The updated room.
@@ -154,16 +170,20 @@ def edit_room(
     """
     room = get_room(rooms, room_id)
     new_capacity = room.capacity if capacity is None else capacity
-    new_equipment = room.equipment if equipment is None else dict(equipment)
-    validate_room_details(room_id, new_capacity, new_equipment)
+    new_equipment = (
+        room.equipment if equipment is None else dict(equipment)
+    )
+    new_name = room.name if name is None else name
+    validate_room_details(room_id, new_capacity, new_equipment, new_name)
     room.capacity = new_capacity
     room.equipment = new_equipment
+    room.name = new_name
     return room
 
 
 def delete_room(rooms: Dict[str, Room], room_id: str) -> None:
     """
-    Remove a room from the room data.
+    Remove a room from the room data in O(1) time.
 
     Args:
         rooms (Dict[str, Room]): Room data keyed by room id.
@@ -234,6 +254,8 @@ def has_equipment(room: Room, required: Dict[str, int]) -> bool:
     """
     Check whether a room has at least the required equipment counts.
 
+    Short-circuits immediately on the first deficient equipment item.
+
     Args:
         room (Room): The room to check.
         required (Dict[str, int]): Equipment name to minimum count.
@@ -241,8 +263,8 @@ def has_equipment(room: Room, required: Dict[str, int]) -> bool:
     Returns:
         bool: True if every required item is present in enough numbers.
     """
-    for name, minimum in required.items():
-        if room.equipment.get(name, 0) < minimum:
+    for item_name, minimum in required.items():
+        if room.equipment.get(item_name, 0) < minimum:
             return False
     return True
 
@@ -264,6 +286,8 @@ def validate_search(
     Raises:
         InvalidRoomError: If group size is below 1 or dates are reversed.
     """
+    if isinstance(group_size, bool) or not isinstance(group_size, int):
+        raise InvalidRoomError("Group size must be a whole number.")
     if group_size < MIN_CAPACITY:
         raise InvalidRoomError("Group size must be at least 1.")
     if end_date < start_date:
@@ -280,7 +304,8 @@ def iter_matching_rooms(
     """
     Yield rooms that fit the group, have the equipment, and are open.
 
-    Each room is checked once, so this is O(n) for n rooms.
+    Evaluates fast O(1) integer capacity checks first before inspecting
+    equipment dictionaries or iterating closure dates.
 
     Args:
         rooms (Dict[str, Room]): Room data keyed by room id.
@@ -290,7 +315,7 @@ def iter_matching_rooms(
         required_equipment (Optional[Dict[str, int]]): Minimum equipment.
 
     Returns:
-        Iterator[Room]: Matching rooms in the order they were added.
+        Iterator[Room]: Matching rooms in insertion order.
     """
     required = required_equipment or {}
     for room in rooms.values():
@@ -311,8 +336,6 @@ def find_available_rooms(
 ) -> List[Room]:
     """
     Filter rooms by capacity, equipment, and date range in O(n) time.
-
-    Results are not sorted; the caller may sort them if it needs to.
 
     Args:
         rooms (Dict[str, Room]): Room data keyed by room id.
@@ -341,9 +364,11 @@ def recommend_room(
     required_equipment: Optional[Dict[str, int]] = None,
 ) -> Optional[Room]:
     """
-    Recommend the smallest matching room in one O(n) pass.
+    Recommend the smallest matching room in a single O(n) pass.
 
-    A single pass with min() avoids the O(n log n) cost of sorting.
+    Uses min() with a generator to avoid the O(n log n) sorting cost
+    and maintain O(1) auxiliary space. Ties are broken deterministically
+    by room id.
 
     Args:
         rooms (Dict[str, Room]): Room data keyed by room id.
@@ -353,8 +378,7 @@ def recommend_room(
         required_equipment (Optional[Dict[str, int]]): Minimum equipment.
 
     Returns:
-        Optional[Room]: Smallest fitting room (ties broken by room id),
-            or None if no room matches.
+        Optional[Room]: Smallest fitting room, or None if no match.
 
     Raises:
         InvalidRoomError: If group size is below 1 or dates are reversed.

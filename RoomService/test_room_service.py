@@ -3,8 +3,8 @@
 # author: Su Pyae Pyae Aung (Micky)
 # date: 2026-10-06
 
-import unittest
 from datetime import date
+import unittest
 
 import room_service as rs
 
@@ -26,6 +26,15 @@ class TestCreateRoom(RoomTestCase):
         self.assertIs(self.rooms["A101"], room)
         self.assertEqual(room.capacity, 40)
         self.assertEqual(room.equipment, {"projector": 1})
+        self.assertEqual(room.name, "")
+
+    def test_create_room_with_name(self) -> None:
+        """Check: create room with human-readable name."""
+        room = rs.create_room(
+            self.rooms, "601", 40, {"projector": 1}, name="Pioneer"
+        )
+        self.assertEqual(room.room_id, "601")
+        self.assertEqual(room.name, "Pioneer")
 
     def test_create_room_without_equipment_defaults_to_empty(self) -> None:
         """Check: create room without equipment defaults to empty."""
@@ -51,6 +60,17 @@ class TestCreateRoom(RoomTestCase):
             with self.assertRaises(rs.InvalidRoomError):
                 rs.create_room(self.rooms, bad_id, 40)
 
+    def test_non_string_id_rejected(self) -> None:
+        """Check: non-string id rejected."""
+        for bad_id in (101, None, ["A101"]):
+            with self.assertRaises(rs.InvalidRoomError):
+                rs.create_room(self.rooms, bad_id, 40)
+
+    def test_non_string_name_rejected(self) -> None:
+        """Check: non-string room name rejected."""
+        with self.assertRaises(rs.InvalidRoomError):
+            rs.create_room(self.rooms, "A101", 40, name=123)
+
     def test_capacity_must_be_positive_integer(self) -> None:
         """Check: capacity must be positive integer."""
         for bad_capacity in (0, -5, 10.5, "40", True):
@@ -68,10 +88,19 @@ class TestCreateRoom(RoomTestCase):
         with self.assertRaises(rs.InvalidRoomError):
             rs.create_room(self.rooms, "A101", 40, {"projector": -1})
 
+    def test_non_integer_equipment_count_rejected(self) -> None:
+        """Check: non-integer equipment count rejected."""
+        for bad_count in ("one", 2.5, True, None):
+            with self.assertRaises(rs.InvalidRoomError):
+                rs.create_room(
+                    self.rooms, "A101", 40, {"projector": bad_count}
+                )
+
     def test_blank_equipment_name_rejected(self) -> None:
         """Check: blank equipment name rejected."""
-        with self.assertRaises(rs.InvalidRoomError):
-            rs.create_room(self.rooms, "A101", 40, {" ": 1})
+        for bad_name in (" ", "", 123):
+            with self.assertRaises(rs.InvalidRoomError):
+                rs.create_room(self.rooms, "A101", 40, {bad_name: 1})
 
 
 class TestEditRoom(RoomTestCase):
@@ -80,19 +109,29 @@ class TestEditRoom(RoomTestCase):
     def setUp(self) -> None:
         """Create one room to edit."""
         super().setUp()
-        rs.create_room(self.rooms, "A101", 40, {"projector": 1})
+        rs.create_room(
+            self.rooms, "A101", 40, {"projector": 1}, name="Pioneer"
+        )
 
-    def test_edit_capacity_only_keeps_equipment(self) -> None:
-        """Check: edit capacity only keeps equipment."""
+    def test_edit_capacity_only_keeps_equipment_and_name(self) -> None:
+        """Check: edit capacity only keeps equipment and name."""
         room = rs.edit_room(self.rooms, "A101", capacity=50)
         self.assertEqual(room.capacity, 50)
         self.assertEqual(room.equipment, {"projector": 1})
+        self.assertEqual(room.name, "Pioneer")
 
-    def test_edit_equipment_only_keeps_capacity(self) -> None:
-        """Check: edit equipment only keeps capacity."""
+    def test_edit_equipment_only_keeps_capacity_and_name(self) -> None:
+        """Check: edit equipment only keeps capacity and name."""
         room = rs.edit_room(self.rooms, "A101", equipment={"mic": 2})
         self.assertEqual(room.capacity, 40)
         self.assertEqual(room.equipment, {"mic": 2})
+        self.assertEqual(room.name, "Pioneer")
+
+    def test_edit_name(self) -> None:
+        """Check: edit name updates room name."""
+        room = rs.edit_room(self.rooms, "A101", name="Voyager")
+        self.assertEqual(room.name, "Voyager")
+        self.assertEqual(room.capacity, 40)
 
     def test_edit_missing_room_raises(self) -> None:
         """Check: edit missing room raises."""
@@ -264,8 +303,11 @@ class TestFindAvailableRooms(RoomTestCase):
 
     def test_invalid_group_size_rejected(self) -> None:
         """Check: invalid group size rejected."""
-        with self.assertRaises(rs.InvalidRoomError):
-            rs.find_available_rooms(self.rooms, 0, self.start, self.end)
+        for bad_size in (0, -1, 10.5, "20", True):
+            with self.assertRaises(rs.InvalidRoomError):
+                rs.find_available_rooms(
+                    self.rooms, bad_size, self.start, self.end
+                )
 
     def test_reversed_dates_rejected(self) -> None:
         """Check: reversed dates rejected."""
@@ -321,10 +363,26 @@ class TestRecommendRoom(RoomTestCase):
 
     def test_invalid_inputs_rejected(self) -> None:
         """Bad group size or reversed dates raise InvalidRoomError."""
-        with self.assertRaises(rs.InvalidRoomError):
-            rs.recommend_room(self.rooms, 0, self.start, self.end)
+        for bad_size in (0, -1, 10.5, "20", True):
+            with self.assertRaises(rs.InvalidRoomError):
+                rs.recommend_room(self.rooms, bad_size, self.start, self.end)
         with self.assertRaises(rs.InvalidRoomError):
             rs.recommend_room(self.rooms, 10, self.end, self.start)
+
+
+class TestSeedRooms(RoomTestCase):
+    """Tests for load_cmkl_rooms."""
+
+    def test_load_cmkl_rooms_populates_catalog(self) -> None:
+        """Check: load cmkl rooms populates official rooms."""
+        from seed_rooms import load_cmkl_rooms
+
+        load_cmkl_rooms(self.rooms)
+        self.assertIn("601", self.rooms)
+        self.assertEqual(self.rooms["601"].name, "Pioneer")
+        self.assertEqual(self.rooms["608"].name, "Bridge")
+        self.assertEqual(self.rooms["608"].capacity, 60)
+        self.assertEqual(len(self.rooms), 10)
 
 
 if __name__ == "__main__":
