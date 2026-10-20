@@ -9,13 +9,23 @@ from dataclasses import replace
 from datetime import date, time
 from typing import List, Optional, Protocol
 
-from .reservation_data import (
-    Repetition,
-    Reservation,
-    ReservationError,
-    ReservationNotFoundError,
-    ReservationRepository,
-)
+try:
+    from .reservation_data import (
+        Repetition,
+        Reservation,
+        ReservationError,
+        ReservationNotFoundError,
+        ReservationRepository,
+    )
+except ImportError:
+    from reservation_data import (
+        Repetition,
+        Reservation,
+        ReservationError,
+        ReservationNotFoundError,
+        ReservationRepository,
+    )
+
 
 ID_LENGTH = 8
 

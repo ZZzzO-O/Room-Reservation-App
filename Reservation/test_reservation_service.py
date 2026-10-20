@@ -10,21 +10,39 @@ from datetime import date, time
 from typing import Dict, Optional
 
 
-from .reservation_data import (
-    DuplicateReservationError,
-    Repetition,
-    Reservation,
-    ReservationNotFoundError,
-    ReservationRepository,
-)
-from .reservation_service import (
-    CapacityExceededError,
-    InvalidReservationError,
-    ReservationConflictError,
-    ReservationService,
-    RoomNotFoundError,
-    has_time_overlap,
-)
+try:
+    from .reservation_data import (
+        DuplicateReservationError,
+        Repetition,
+        Reservation,
+        ReservationNotFoundError,
+        ReservationRepository,
+    )
+    from .reservation_service import (
+        CapacityExceededError,
+        InvalidReservationError,
+        ReservationConflictError,
+        ReservationService,
+        RoomNotFoundError,
+        has_time_overlap,
+    )
+except ImportError:
+    from reservation_data import (
+        DuplicateReservationError,
+        Repetition,
+        Reservation,
+        ReservationNotFoundError,
+        ReservationRepository,
+    )
+    from reservation_service import (
+        CapacityExceededError,
+        InvalidReservationError,
+        ReservationConflictError,
+        ReservationService,
+        RoomNotFoundError,
+        has_time_overlap,
+    )
+
 
 MONDAY = date(2026, 11, 2)
 NEXT_MONDAY = date(2026, 11, 9)
