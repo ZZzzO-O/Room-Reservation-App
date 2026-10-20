@@ -3,7 +3,7 @@
 # author: Su Pyae Pyae Aung (Micky) & Thiri Htet Thwe (Thiri)
 # date: 2026-10-20
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 import sys
 import unittest
@@ -11,11 +11,13 @@ import unittest
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR / "RoomService"))
 sys.path.insert(0, str(BASE_DIR / "AuthService"))
+sys.path.insert(0, str(BASE_DIR / "Reservation"))
 sys.path.insert(0, str(BASE_DIR / "Database"))
 
 import auth_service as auth  # noqa: E402
 from auth_service import Session, User  # noqa: E402
 import database as db  # noqa: E402
+from reservation_data import Repetition, Reservation  # noqa: E402
 from room_service import Room, UnavailablePeriod  # noqa: E402
 
 
@@ -177,6 +179,82 @@ class TestUserAndSessionPersistence(DatabaseTestCase):
 
         loaded = db.load_sessions(self.conn)
         self.assertNotIn("token-logout", loaded)
+
+
+class TestReservationPersistence(DatabaseTestCase):
+    """Test suite covering reservation persistence in SQLite."""
+
+    def setUp(self) -> None:
+        """Set up in-memory DB and seed parent room."""
+        super().setUp()
+        room = Room(room_id="601", capacity=40, name="Pioneer")
+        db.save_room(self.conn, room)
+
+    def test_save_and_load_reservation(self) -> None:
+        """Save weekly reservation and reload from SQLite."""
+        res = Reservation(
+            reservation_id="RES-001",
+            competency="SEN-201",
+            room_id="601",
+            group_size=30,
+            start_date=date(2026, 8, 17),
+            end_date=date(2026, 12, 1),
+            start_time=time(10, 0),
+            end_time=time(12, 0),
+            repetition=Repetition.WEEKLY,
+        )
+        db.save_reservation(self.conn, res)
+        loaded = db.load_reservations(self.conn)
+
+        self.assertIn("RES-001", loaded)
+        loaded_res = loaded["RES-001"]
+        self.assertEqual(loaded_res.competency, "SEN-201")
+        self.assertEqual(loaded_res.room_id, "601")
+        self.assertEqual(loaded_res.group_size, 30)
+        self.assertEqual(loaded_res.start_date, date(2026, 8, 17))
+        self.assertEqual(loaded_res.end_date, date(2026, 12, 1))
+        self.assertEqual(loaded_res.start_time, time(10, 0))
+        self.assertEqual(loaded_res.end_time, time(12, 0))
+        self.assertEqual(loaded_res.repetition, Repetition.WEEKLY)
+
+    def test_update_reservation(self) -> None:
+        """Update existing reservation fields in SQLite."""
+        res = Reservation(
+            reservation_id="RES-001",
+            competency="SEN-201",
+            room_id="601",
+            group_size=30,
+            start_date=date(2026, 8, 17),
+            start_time=time(10, 0),
+            end_time=time(12, 0),
+            repetition=Repetition.ONCE,
+        )
+        db.save_reservation(self.conn, res)
+
+        res.group_size = 35
+        res.competency = "SEN-201 Advanced"
+        db.save_reservation(self.conn, res)
+
+        loaded = db.load_reservations(self.conn)
+        self.assertEqual(loaded["RES-001"].group_size, 35)
+        self.assertEqual(loaded["RES-001"].competency, "SEN-201 Advanced")
+
+    def test_delete_reservation(self) -> None:
+        """Delete reservation removes record from SQLite."""
+        res = Reservation(
+            reservation_id="RES-001",
+            competency="SEN-201",
+            room_id="601",
+            group_size=30,
+            start_date=date(2026, 8, 17),
+            start_time=time(10, 0),
+            end_time=time(12, 0),
+        )
+        db.save_reservation(self.conn, res)
+        db.delete_reservation(self.conn, "RES-001")
+
+        loaded = db.load_reservations(self.conn)
+        self.assertNotIn("RES-001", loaded)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@
 # author: Thiri Htet Thwe (Thiri)
 # date: 2026-10-20
 
-from datetime import date
+from datetime import date, time
 from functools import wraps
 from pathlib import Path
 import sqlite3
@@ -17,10 +17,13 @@ from flask_cors import CORS
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR / "RoomService"))
 sys.path.insert(0, str(BASE_DIR / "AuthService"))
+sys.path.insert(0, str(BASE_DIR / "Reservation"))
 sys.path.insert(0, str(BASE_DIR / "Database"))
 
 import auth_service as auth  # noqa: E402
 import database as db  # noqa: E402
+import reservation_data as rdata  # noqa: E402
+import reservation_service as rservice  # noqa: E402
 import room_service as rs  # noqa: E402
 from seed_rooms import load_cmkl_rooms  # noqa: E402
 
@@ -67,10 +70,78 @@ def room_to_dict(room: rs.Room) -> Dict[str, Any]:
     }
 
 
+def parse_time(time_str: str) -> time:
+    """
+    Parse an ISO time string (HH:MM or HH:MM:SS) into a time object.
+
+    Args:
+        time_str (str): Time string.
+
+    Returns:
+        time: Parsed time object.
+
+    Raises:
+        ValueError: If format is invalid.
+    """
+    return time.fromisoformat(time_str.strip())
+
+
+def reservation_to_dict(res: rdata.Reservation) -> Dict[str, Any]:
+    """
+    Serialize a Reservation dataclass into a JSON-compatible dictionary.
+
+    Args:
+        res (rdata.Reservation): Reservation dataclass instance.
+
+    Returns:
+        Dict[str, Any]: Serialized dictionary representation.
+    """
+    end_d_str = res.end_date.isoformat() if res.end_date else None
+    return {
+        "reservation_id": res.reservation_id,
+        "competency": res.competency,
+        "room_id": res.room_id,
+        "group_size": res.group_size,
+        "start_date": res.start_date.isoformat(),
+        "end_date": end_d_str,
+        "start_time": res.start_time.strftime("%H:%M"),
+        "end_time": res.end_time.strftime("%H:%M"),
+        "day_of_week": res.day_of_week.value,
+        "repetition": res.repetition.value,
+    }
+
+
+class AppRoomCapacityProvider:
+    """Adapter allowing ReservationService to query room capacities."""
+
+    def __init__(self, rooms: Dict[str, rs.Room]) -> None:
+        """
+        Store reference to the rooms dictionary.
+
+        Args:
+            rooms (Dict[str, rs.Room]): Shared room dictionary.
+        """
+        self._rooms = rooms
+
+    def get_room_capacity(self, room_id: str) -> Optional[int]:
+        """
+        Look up capacity for room_id.
+
+        Args:
+            room_id (str): Room identifier.
+
+        Returns:
+            Optional[int]: Capacity or None if not found.
+        """
+        room = self._rooms.get(room_id)
+        return room.capacity if room is not None else None
+
+
 def create_app(
     users: Optional[Dict[str, auth.User]] = None,
     sessions: Optional[Dict[str, auth.Session]] = None,
     rooms: Optional[Dict[str, rs.Room]] = None,
+    reservations: Optional[rdata.ReservationRepository] = None,
     db_path: Optional[str] = None,
 ) -> Flask:
     """
@@ -83,6 +154,7 @@ def create_app(
         users (Optional[Dict[str, auth.User]]): Pre-existing user store.
         sessions (Optional[Dict[str, auth.Session]]): Session store.
         rooms (Optional[Dict[str, rs.Room]]): Room data store.
+        reservations (Optional[rdata.ReservationRepository]): Repository.
         db_path (Optional[str]): Path to SQLite database file or ':memory:'.
 
     Returns:
@@ -109,6 +181,17 @@ def create_app(
         {} if sessions is None else sessions
     )
     app_rooms: Dict[str, rs.Room] = {} if rooms is None else rooms
+    app_res_repo: rdata.ReservationRepository = (
+        rdata.ReservationRepository()
+        if reservations is None
+        else reservations
+    )
+    capacity_provider = AppRoomCapacityProvider(app_rooms)
+    res_service = rservice.ReservationService(
+        app_res_repo, capacity_provider
+    )
+    app.res_service = res_service  # type: ignore[attr-defined]
+    app.res_repo = app_res_repo  # type: ignore[attr-defined]
 
     # Load from or populate SQLite
     if conn is not None:
@@ -127,6 +210,11 @@ def create_app(
             load_cmkl_rooms(app_rooms)
             for r in app_rooms.values():
                 db.save_room(conn, r)
+
+        loaded_reservations = db.load_reservations(conn)
+        for res_obj in loaded_reservations.values():
+            if app_res_repo.get_by_id(res_obj.reservation_id) is None:
+                app_res_repo.add_reservation(res_obj)
 
         app_sessions.update(db.load_sessions(conn))
     else:
@@ -203,6 +291,16 @@ def create_app(
                     "GET /api/rooms/available",
                     "GET /api/rooms/recommend",
                     "POST /api/rooms/seed",
+                ],
+                "reservations": [
+                    "GET /api/reservations",
+                    "POST /api/reservations",
+                    "GET /api/reservations/<id>",
+                    "PUT /api/reservations/<id>",
+                    "DELETE /api/reservations/<id>",
+                    "GET /api/reservations/search",
+                    "GET /api/reservations/schedule",
+                    "GET /api/reservations/export",
                 ],
             },
             "test_accounts": {
@@ -474,6 +572,256 @@ def create_app(
             "message": "Seeded official CMKL rooms.",
             "total_rooms": len(app_rooms),
         }), 200
+
+    # ---------------------------------------------------------
+    # Reservation Routes (OBJ-05, OBJ-06, OBJ-07, OBJ-08)
+    # ---------------------------------------------------------
+
+    @app.route("/api/reservations", methods=["GET"])
+    @require_auth
+    def list_reservations(user: auth.User) -> Tuple[Response, int]:
+        """List all reservations, optionally filtered by room."""
+        room_id = request.args.get("room_id")
+        if room_id:
+            res_list = app_res_repo.get_by_room(room_id)
+        else:
+            res_list = res_service.get_all_reservations()
+
+        serialized = [reservation_to_dict(r) for r in res_list]
+        return jsonify({
+            "reservations": serialized,
+            "total": len(serialized),
+        }), 200
+
+    @app.route("/api/reservations", methods=["POST"])
+    @require_auth
+    def api_create_reservation(user: auth.User) -> Tuple[Response, int]:
+        """Create a reservation with conflict & capacity checks."""
+        data = request.get_json(silent=True) or {}
+        competency = data.get("competency", "")
+        room_id = data.get("room_id", "")
+        group_size = data.get("group_size", 0)
+        raw_start_date = data.get("start_date", "")
+        raw_end_date = data.get("end_date")
+        raw_start_time = data.get("start_time", "")
+        raw_end_time = data.get("end_time", "")
+        repetition_str = data.get("repetition", "Weekly")
+
+        try:
+            group_size = int(group_size)
+            start_d = parse_date(raw_start_date)
+            end_d = parse_date(raw_end_date) if raw_end_date else None
+            start_t = parse_time(raw_start_time)
+            end_t = parse_time(raw_end_time)
+            rep = rdata.Repetition(repetition_str)
+        except (ValueError, TypeError) as err:
+            return jsonify({"error": f"Invalid format: {str(err)}"}), 400
+
+        candidate = rdata.Reservation(
+            competency=competency,
+            room_id=room_id,
+            group_size=group_size,
+            start_date=start_d,
+            end_date=end_d,
+            start_time=start_t,
+            end_time=end_t,
+            repetition=rep,
+        )
+
+        try:
+            created = res_service.create_reservation(candidate)
+            if conn is not None:
+                db.save_reservation(conn, created)
+            return jsonify({
+                "message": "Reservation created successfully.",
+                "reservation": reservation_to_dict(created),
+            }), 201
+        except (
+            rservice.InvalidReservationError,
+            rservice.CapacityExceededError,
+        ) as err:
+            return jsonify({"error": str(err)}), 400
+        except rservice.RoomNotFoundError as err:
+            return jsonify({"error": str(err)}), 404
+        except rservice.ReservationConflictError as err:
+            return jsonify({
+                "error": str(err),
+                "conflicting_reservation": reservation_to_dict(
+                    err.conflicting_reservation
+                ),
+            }), 409
+
+    @app.route("/api/reservations/search", methods=["GET"])
+    @require_auth
+    def api_search_reservations(user: auth.User) -> Tuple[Response, int]:
+        """Search reservations by competency name."""
+        query = request.args.get("competency", "")
+        matched = res_service.search_by_competency(query)
+        serialized = [reservation_to_dict(r) for r in matched]
+        return jsonify({
+            "reservations": serialized,
+            "total": len(serialized),
+        }), 200
+
+    @app.route("/api/reservations/schedule", methods=["GET"])
+    @require_auth
+    def api_get_schedule(user: auth.User) -> Tuple[Response, int]:
+        """View schedule for a specific week and optional room."""
+        raw_week = request.args.get("week_start")
+        if not raw_week:
+            msg = "week_start (YYYY-MM-DD) query parameter required."
+            return jsonify({"error": msg}), 400
+        try:
+            week_start = parse_date(raw_week)
+        except ValueError:
+            msg = "Invalid week_start format. Use YYYY-MM-DD."
+            return jsonify({"error": msg}), 400
+
+        room_id = request.args.get("room_id")
+        schedule = res_service.get_schedule(week_start, room_id)
+        serialized = [reservation_to_dict(r) for r in schedule]
+        return jsonify({
+            "week_start": week_start.isoformat(),
+            "room_id": room_id,
+            "schedule": serialized,
+            "total": len(serialized),
+        }), 200
+
+    @app.route("/api/reservations/export", methods=["GET"])
+    @require_auth
+    def api_export_schedule(user: auth.User) -> Response:
+        """Export schedule as a plain text timetable file."""
+        raw_week = request.args.get("week_start")
+        if not raw_week:
+            return jsonify({"error": "week_start query required."}), 400
+        try:
+            week_start = parse_date(raw_week)
+        except ValueError:
+            msg = "Invalid week_start format. Use YYYY-MM-DD."
+            return jsonify({"error": msg}), 400
+
+        room_id = request.args.get("room_id")
+        text_report = res_service.export_schedule_text(week_start, room_id)
+        filename = f"schedule_{week_start.isoformat()}.txt"
+        resp = Response(text_report, mimetype="text/plain; charset=utf-8")
+        resp.headers["Content-Disposition"] = (
+            f'attachment; filename="{filename}"'
+        )
+        return resp
+
+    @app.route("/api/reservations/<reservation_id>", methods=["GET"])
+    @require_auth
+    def api_get_reservation(
+        user: auth.User, reservation_id: str
+    ) -> Tuple[Response, int]:
+        """Get details of a single reservation by ID."""
+        try:
+            res = res_service.get_reservation(reservation_id)
+            return jsonify({"reservation": reservation_to_dict(res)}), 200
+        except rservice.ReservationNotFoundError as err:
+            return jsonify({"error": str(err)}), 404
+
+    @app.route("/api/reservations/<reservation_id>", methods=["PUT"])
+    @require_auth
+    def api_edit_reservation(
+        user: auth.User, reservation_id: str
+    ) -> Tuple[Response, int]:
+        """Update an existing reservation with conflict check."""
+        existing = app_res_repo.get_by_id(reservation_id)
+        if existing is None:
+            msg = f"Reservation with ID '{reservation_id}' not found."
+            return jsonify({"error": msg}), 404
+
+        data = request.get_json(silent=True) or {}
+        competency = data.get("competency", existing.competency)
+        room_id = data.get("room_id", existing.room_id)
+        group_size = data.get("group_size", existing.group_size)
+        raw_start_date = data.get("start_date")
+        raw_end_date = data.get("end_date")
+        raw_start_time = data.get("start_time")
+        raw_end_time = data.get("end_time")
+        repetition_str = data.get("repetition")
+
+        try:
+            group_size = int(group_size)
+            start_d = (
+                parse_date(raw_start_date)
+                if raw_start_date
+                else existing.start_date
+            )
+            end_d = (
+                parse_date(raw_end_date)
+                if raw_end_date is not None
+                else existing.end_date
+            )
+            start_t = (
+                parse_time(raw_start_time)
+                if raw_start_time
+                else existing.start_time
+            )
+            end_t = (
+                parse_time(raw_end_time)
+                if raw_end_time
+                else existing.end_time
+            )
+            rep = (
+                rdata.Repetition(repetition_str)
+                if repetition_str
+                else existing.repetition
+            )
+        except (ValueError, TypeError) as err:
+            return jsonify({"error": f"Invalid format: {str(err)}"}), 400
+
+        updated = rdata.Reservation(
+            reservation_id=reservation_id,
+            competency=competency,
+            room_id=room_id,
+            group_size=group_size,
+            start_date=start_d,
+            end_date=end_d,
+            start_time=start_t,
+            end_time=end_t,
+            repetition=rep,
+        )
+
+        try:
+            saved = res_service.edit_reservation(updated)
+            if conn is not None:
+                db.save_reservation(conn, saved)
+            return jsonify({
+                "message": "Reservation updated successfully.",
+                "reservation": reservation_to_dict(saved),
+            }), 200
+        except (
+            rservice.InvalidReservationError,
+            rservice.CapacityExceededError,
+        ) as err:
+            return jsonify({"error": str(err)}), 400
+        except rservice.RoomNotFoundError as err:
+            return jsonify({"error": str(err)}), 404
+        except rservice.ReservationConflictError as err:
+            return jsonify({
+                "error": str(err),
+                "conflicting_reservation": reservation_to_dict(
+                    err.conflicting_reservation
+                ),
+            }), 409
+
+    @app.route("/api/reservations/<reservation_id>", methods=["DELETE"])
+    @require_auth
+    def api_delete_reservation(
+        user: auth.User, reservation_id: str
+    ) -> Tuple[Response, int]:
+        """Delete an existing reservation."""
+        try:
+            res_service.delete_reservation(reservation_id)
+            if conn is not None:
+                db.delete_reservation(conn, reservation_id)
+            return jsonify({
+                "message": f"Reservation {reservation_id} deleted."
+            }), 200
+        except rservice.ReservationNotFoundError as err:
+            return jsonify({"error": str(err)}), 404
 
     return app
 

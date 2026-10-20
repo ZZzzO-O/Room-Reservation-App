@@ -3,7 +3,7 @@
 # author: Su Pyae Pyae Aung (Micky) & Thiri Htet Thwe (Thiri)
 # date: 2026-10-20
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 import json
 from pathlib import Path
 import sqlite3
@@ -13,8 +13,10 @@ from typing import Dict
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR / "RoomService"))
 sys.path.insert(0, str(BASE_DIR / "AuthService"))
+sys.path.insert(0, str(BASE_DIR / "Reservation"))
 
 from auth_service import Session, User  # noqa: E402
+from reservation_data import Repetition, Reservation  # noqa: E402
 from room_service import Room, UnavailablePeriod  # noqa: E402
 
 DEFAULT_DB_FILE = "app.db"
@@ -83,6 +85,21 @@ def init_db(conn: sqlite3.Connection) -> None:
                 expires_at TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (user_id) REFERENCES users(user_id)
+                    ON DELETE CASCADE
+            );
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS reservations (
+                reservation_id TEXT PRIMARY KEY,
+                competency TEXT NOT NULL,
+                room_id TEXT NOT NULL,
+                group_size INTEGER NOT NULL,
+                start_date TEXT NOT NULL,
+                end_date TEXT,
+                start_time TEXT NOT NULL,
+                end_time TEXT NOT NULL,
+                repetition TEXT NOT NULL,
+                FOREIGN KEY (room_id) REFERENCES rooms(room_id)
                     ON DELETE CASCADE
             );
         """)
@@ -343,3 +360,112 @@ def load_sessions(conn: sqlite3.Connection) -> Dict[str, Session]:
         )
         sessions[session.token] = session
     return sessions
+
+
+# -------------------------------------------------------------
+# Reservation Persistence Functions
+# -------------------------------------------------------------
+
+def save_reservation(
+    conn: sqlite3.Connection, reservation: Reservation
+) -> None:
+    """
+    Insert or update a reservation record in SQLite.
+
+    Args:
+        conn (sqlite3.Connection): Database connection.
+        reservation (Reservation): Reservation instance to persist.
+
+    Returns:
+        None
+    """
+    if reservation.reservation_id is None:
+        raise ValueError("Cannot persist reservation without reservation_id.")
+
+    end_d_str = (
+        reservation.end_date.isoformat() if reservation.end_date else None
+    )
+    with conn:
+        conn.execute(
+            """
+            INSERT INTO reservations
+            (reservation_id, competency, room_id, group_size,
+             start_date, end_date, start_time, end_time, repetition)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(reservation_id) DO UPDATE SET
+                competency = excluded.competency,
+                room_id = excluded.room_id,
+                group_size = excluded.group_size,
+                start_date = excluded.start_date,
+                end_date = excluded.end_date,
+                start_time = excluded.start_time,
+                end_time = excluded.end_time,
+                repetition = excluded.repetition;
+            """,
+            (
+                reservation.reservation_id,
+                reservation.competency,
+                reservation.room_id,
+                reservation.group_size,
+                reservation.start_date.isoformat(),
+                end_d_str,
+                reservation.start_time.isoformat(),
+                reservation.end_time.isoformat(),
+                reservation.repetition.value,
+            ),
+        )
+
+
+def delete_reservation(conn: sqlite3.Connection, reservation_id: str) -> None:
+    """
+    Delete a reservation record from SQLite by ID.
+
+    Args:
+        conn (sqlite3.Connection): Database connection.
+        reservation_id (str): Identifier of the reservation.
+
+    Returns:
+        None
+    """
+    with conn:
+        conn.execute(
+            "DELETE FROM reservations WHERE reservation_id = ?;",
+            (reservation_id,),
+        )
+
+
+def load_reservations(conn: sqlite3.Connection) -> Dict[str, Reservation]:
+    """
+    Load all reservation records from SQLite into memory.
+
+    Args:
+        conn (sqlite3.Connection): Database connection.
+
+    Returns:
+        Dict[str, Reservation]: Keyed by reservation_id.
+    """
+    reservations: Dict[str, Reservation] = {}
+    rows = conn.execute(
+        """
+        SELECT reservation_id, competency, room_id, group_size,
+               start_date, end_date, start_time, end_time, repetition
+        FROM reservations;
+        """
+    ).fetchall()
+    for row in rows:
+        end_d = (
+            date.fromisoformat(row["end_date"]) if row["end_date"] else None
+        )
+        res = Reservation(
+            reservation_id=row["reservation_id"],
+            competency=row["competency"],
+            room_id=row["room_id"],
+            group_size=row["group_size"],
+            start_date=date.fromisoformat(row["start_date"]),
+            end_date=end_d,
+            start_time=time.fromisoformat(row["start_time"]),
+            end_time=time.fromisoformat(row["end_time"]),
+            repetition=Repetition(row["repetition"]),
+        )
+        reservations[res.reservation_id] = res
+    return reservations

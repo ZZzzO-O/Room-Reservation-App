@@ -6,7 +6,7 @@
 
 import uuid
 from dataclasses import replace
-from datetime import date, time
+from datetime import date, time, timedelta
 from typing import List, Optional, Protocol
 
 try:
@@ -269,6 +269,90 @@ class ReservationService:
             List[Reservation]: Matching reservations.
         """
         return self._repository.find_by_competency(text)
+
+    def get_all_reservations(self) -> List[Reservation]:
+        """
+        Fetch all stored reservations.
+
+        Returns:
+            List[Reservation]: All reservations in storage.
+        """
+        return self._repository.get_all()
+
+    def get_schedule(
+        self, week_start: date, room_id: Optional[str] = None
+    ) -> List[Reservation]:
+        """
+        Fetch reservations active during the specified week.
+
+        Args:
+            week_start (date): Start date of the week (e.g. Monday).
+            room_id (Optional[str]): If provided, filter for this room only.
+
+        Returns:
+            List[Reservation]: Active reservations sorted by day and time.
+        """
+        week_end = week_start + timedelta(days=6)
+        candidates = (
+            self._repository.get_by_room(room_id)
+            if room_id
+            else self._repository.get_all()
+        )
+        matched = []
+        for res in candidates:
+            if has_date_overlap(
+                res.start_date, res.last_date, week_start, week_end
+            ):
+                matched.append(res)
+
+        # Sort by weekday, start_time, room_id
+        matched.sort(
+            key=lambda r: (r.start_date.weekday(), r.start_time, r.room_id)
+        )
+        return matched
+
+    def export_schedule_text(
+        self, week_start: date, room_id: Optional[str] = None
+    ) -> str:
+        """
+        Export weekly schedule to formatted plain text report.
+
+        Args:
+            week_start (date): Start date of the target week.
+            room_id (Optional[str]): Room identifier or None for all rooms.
+
+        Returns:
+            str: Human-readable formatted timetable text.
+        """
+        schedule = self.get_schedule(week_start, room_id)
+        week_end = week_start + timedelta(days=6)
+        room_label = f"Room: {room_id}" if room_id else "All Rooms"
+
+        lines = [
+            "=" * 79,
+            "CMKL CLASSROOM RESERVATION SCHEDULE",
+            f"Week: {week_start.isoformat()} to {week_end.isoformat()} "
+            f"({room_label})",
+            f"Total Bookings: {len(schedule)}",
+            "=" * 79,
+            f"{'Day':<10} {'Time':<15} {'Room':<10} {'Competency':<18} "
+            f"{'Students':<10} {'Repetition'}",
+            "-" * 79,
+        ]
+
+        if not schedule:
+            lines.append("No reservations scheduled for this period.")
+        else:
+            for r in schedule:
+                t_str = f"{r.start_time:%H:%M} - {r.end_time:%H:%M}"
+                lines.append(
+                    f"{r.day_of_week.value:<10} {t_str:<15} {r.room_id:<10} "
+                    f"{r.competency:<18} {r.group_size:<10} "
+                    f"{r.repetition.value}"
+                )
+
+        lines.append("=" * 79)
+        return "\n".join(lines)
 
     def _generate_reservation_id(self) -> str:
         """

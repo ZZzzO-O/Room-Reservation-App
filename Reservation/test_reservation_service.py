@@ -261,6 +261,51 @@ class ReservationServiceTest(unittest.TestCase):
             has_time_overlap(time(9), time(10), time(10), time(11))
         )
 
+    def test_get_all_reservations(self) -> None:
+        """Get all returns all created reservations."""
+        self.service.create_reservation(make_weekly())
+        all_res = self.service.get_all_reservations()
+        self.assertEqual(len(all_res), 1)
+
+    def test_get_schedule_and_room_filter(self) -> None:
+        """Schedule filters by active week and optional room."""
+        # Weekly: starts Monday 2026-11-02, lasts until SEMESTER_END in R1
+        res1 = self.service.create_reservation(
+            replace(make_weekly(), room_id="R1")
+        )
+        # One-off: on Monday 2026-11-02 in R2 (fits capacity 10)
+        res2 = self.service.create_reservation(
+            replace(
+                make_weekly(),
+                room_id="R2",
+                group_size=8,
+                repetition=Repetition.ONCE,
+                end_date=None,
+            )
+        )
+        sched_all = self.service.get_schedule(MONDAY)
+        self.assertEqual(len(sched_all), 2)
+
+        sched_r1 = self.service.get_schedule(MONDAY, room_id="R1")
+        self.assertEqual(len(sched_r1), 1)
+        self.assertEqual(sched_r1[0].reservation_id, res1.reservation_id)
+
+        sched_r2 = self.service.get_schedule(MONDAY, room_id="R2")
+        self.assertEqual(len(sched_r2), 1)
+        self.assertEqual(sched_r2[0].reservation_id, res2.reservation_id)
+
+        # Non-overlapping week after SEMESTER_END
+        sched_empty = self.service.get_schedule(date(2026, 12, 28))
+        self.assertEqual(len(sched_empty), 0)
+
+    def test_export_schedule_text(self) -> None:
+        """Export format creates readable timetable text."""
+        self.service.create_reservation(make_weekly())
+        text = self.service.export_schedule_text(MONDAY)
+        self.assertIn("CMKL CLASSROOM RESERVATION SCHEDULE", text)
+        self.assertIn("Total Bookings: 1", text)
+        self.assertIn("Databases", text)
+
 
 if __name__ == "__main__":
     unittest.main()

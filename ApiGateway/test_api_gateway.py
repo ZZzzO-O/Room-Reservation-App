@@ -4,8 +4,10 @@
 # date: 2026-10-20
 
 import json
+import os
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -340,6 +342,272 @@ class TestSqlitePersistenceThroughGateway(unittest.TestCase):
                 app2.conn.close()
             if os.path.exists(tmp_db):
                 os.remove(tmp_db)
+
+    def test_reservation_persists_across_reboot(self) -> None:
+        """Reservation saved in SQLite survives complete app reboot."""
+        tmp_db = os.path.join(tempfile.gettempdir(), "test_res_persist.db")
+        if os.path.exists(tmp_db):
+            os.remove(tmp_db)
+
+        try:
+            app1 = create_app(db_path=tmp_db)
+            c1 = app1.test_client()
+            login_res = c1.post(
+                "/api/auth/login",
+                data=json.dumps({
+                    "email": "staff1@cmkl.ac.th",
+                    "password": "Test@1234",
+                }),
+                content_type="application/json",
+            )
+            token = login_res.get_json()["token"]
+            headers = {"Authorization": f"Bearer {token}"}
+
+            create_res = c1.post(
+                "/api/reservations",
+                headers=headers,
+                data=json.dumps({
+                    "competency": "SEN-201",
+                    "room_id": "601",
+                    "group_size": 30,
+                    "start_date": "2026-08-17",
+                    "end_date": "2026-12-01",
+                    "start_time": "10:00",
+                    "end_time": "12:00",
+                    "repetition": "Weekly",
+                }),
+                content_type="application/json",
+            )
+            self.assertEqual(create_res.status_code, 201)
+            res_id = create_res.get_json()["reservation"]["reservation_id"]
+
+            # Reboot
+            app2 = create_app(db_path=tmp_db)
+            c2 = app2.test_client()
+
+            get_res = c2.get(f"/api/reservations/{res_id}", headers=headers)
+            self.assertEqual(get_res.status_code, 200)
+            data = get_res.get_json()["reservation"]
+            self.assertEqual(data["reservation_id"], res_id)
+            self.assertEqual(data["competency"], "SEN-201")
+        finally:
+            if "app1" in locals() and getattr(app1, "conn", None):
+                app1.conn.close()
+            if "app2" in locals() and getattr(app2, "conn", None):
+                app2.conn.close()
+            if os.path.exists(tmp_db):
+                os.remove(tmp_db)
+
+
+class TestReservationEndpoints(ApiGatewayTestCase):
+    """Test suite covering reservation creation, editing, and conflicts."""
+
+    def setUp(self) -> None:
+        """Configure test client and seed rooms."""
+        super().setUp()
+        self.client.post(
+            "/api/rooms/seed", headers=self.staff_headers()
+        )
+
+    def test_create_reservation_success(self) -> None:
+        """Create valid weekly reservation returns 201 Created."""
+        res = self.client.post(
+            "/api/reservations",
+            headers=self.staff_headers(),
+            data=json.dumps({
+                "competency": "SEN-201",
+                "room_id": "601",
+                "group_size": 30,
+                "start_date": "2026-08-17",
+                "end_date": "2026-12-01",
+                "start_time": "10:00",
+                "end_time": "12:00",
+                "repetition": "Weekly",
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 201)
+        data = res.get_json()["reservation"]
+        self.assertIsNotNone(data["reservation_id"])
+        self.assertEqual(data["competency"], "SEN-201")
+        self.assertEqual(data["day_of_week"], "Monday")
+
+    def test_create_reservation_conflict_returns_409(self) -> None:
+        """Attempting to double-book room returns 409 Conflict."""
+        payload = {
+            "competency": "SEN-201",
+            "room_id": "601",
+            "group_size": 30,
+            "start_date": "2026-08-17",
+            "end_date": "2026-12-01",
+            "start_time": "10:00",
+            "end_time": "12:00",
+            "repetition": "Weekly",
+        }
+        res1 = self.client.post(
+            "/api/reservations",
+            headers=self.staff_headers(),
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(res1.status_code, 201)
+
+        # Overlapping time in same room
+        payload["start_time"] = "11:00"
+        payload["end_time"] = "13:00"
+        payload["competency"] = "SEN-202"
+        res2 = self.client.post(
+            "/api/reservations",
+            headers=self.staff_headers(),
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(res2.status_code, 409)
+        self.assertIn("conflicting_reservation", res2.get_json())
+
+    def test_create_reservation_capacity_exceeded_returns_400(self) -> None:
+        """Group size larger than room capacity returns 400 Bad Request."""
+        res = self.client.post(
+            "/api/reservations",
+            headers=self.staff_headers(),
+            data=json.dumps({
+                "competency": "Large Class",
+                "room_id": "601",
+                "group_size": 999,
+                "start_date": "2026-08-17",
+                "start_time": "10:00",
+                "end_time": "12:00",
+                "repetition": "Once",
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 400)
+
+    def test_create_reservation_unknown_room_returns_404(self) -> None:
+        """Reserving a nonexistent room returns 404 Not Found."""
+        res = self.client.post(
+            "/api/reservations",
+            headers=self.staff_headers(),
+            data=json.dumps({
+                "competency": "Ghost Class",
+                "room_id": "ROOM-999",
+                "group_size": 10,
+                "start_date": "2026-08-17",
+                "start_time": "10:00",
+                "end_time": "12:00",
+                "repetition": "Once",
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 404)
+
+    def test_list_and_search_reservations(self) -> None:
+        """List and search endpoints return matching reservations."""
+        for comp, room in [("Software Eng", "601"), ("AI Studio", "602")]:
+            self.client.post(
+                "/api/reservations",
+                headers=self.staff_headers(),
+                data=json.dumps({
+                    "competency": comp,
+                    "room_id": room,
+                    "group_size": 20,
+                    "start_date": "2026-08-17",
+                    "start_time": "10:00",
+                    "end_time": "12:00",
+                    "repetition": "Once",
+                }),
+                content_type="application/json",
+            )
+
+        list_res = self.client.get(
+            "/api/reservations", headers=self.staff_headers()
+        )
+        self.assertEqual(list_res.status_code, 200)
+        self.assertEqual(list_res.get_json()["total"], 2)
+
+        search_res = self.client.get(
+            "/api/reservations/search?competency=Software",
+            headers=self.staff_headers(),
+        )
+        self.assertEqual(search_res.status_code, 200)
+        self.assertEqual(search_res.get_json()["total"], 1)
+
+    def test_get_edit_and_delete_reservation(self) -> None:
+        """Full lifecycle test: get, edit, and delete reservation."""
+        create_res = self.client.post(
+            "/api/reservations",
+            headers=self.staff_headers(),
+            data=json.dumps({
+                "competency": "Networks",
+                "room_id": "601",
+                "group_size": 20,
+                "start_date": "2026-08-17",
+                "start_time": "10:00",
+                "end_time": "12:00",
+                "repetition": "Once",
+            }),
+            content_type="application/json",
+        )
+        res_id = create_res.get_json()["reservation"]["reservation_id"]
+
+        get_res = self.client.get(
+            f"/api/reservations/{res_id}", headers=self.staff_headers()
+        )
+        self.assertEqual(get_res.status_code, 200)
+
+        edit_res = self.client.put(
+            f"/api/reservations/{res_id}",
+            headers=self.staff_headers(),
+            data=json.dumps({"group_size": 25}),
+            content_type="application/json",
+        )
+        self.assertEqual(edit_res.status_code, 200)
+        self.assertEqual(
+            edit_res.get_json()["reservation"]["group_size"], 25
+        )
+
+        del_res = self.client.delete(
+            f"/api/reservations/{res_id}", headers=self.staff_headers()
+        )
+        self.assertEqual(del_res.status_code, 200)
+
+        del_again = self.client.delete(
+            f"/api/reservations/{res_id}", headers=self.staff_headers()
+        )
+        self.assertEqual(del_again.status_code, 404)
+
+    def test_get_schedule_and_export(self) -> None:
+        """Schedule and export return timetable and text file."""
+        self.client.post(
+            "/api/reservations",
+            headers=self.staff_headers(),
+            data=json.dumps({
+                "competency": "Algorithms",
+                "room_id": "601",
+                "group_size": 25,
+                "start_date": "2026-08-17",
+                "end_date": "2026-12-01",
+                "start_time": "10:00",
+                "end_time": "12:00",
+                "repetition": "Weekly",
+            }),
+            content_type="application/json",
+        )
+
+        sched_res = self.client.get(
+            "/api/reservations/schedule?week_start=2026-08-17",
+            headers=self.staff_headers(),
+        )
+        self.assertEqual(sched_res.status_code, 200)
+        self.assertEqual(sched_res.get_json()["total"], 1)
+
+        export_res = self.client.get(
+            "/api/reservations/export?week_start=2026-08-17",
+            headers=self.staff_headers(),
+        )
+        self.assertEqual(export_res.status_code, 200)
+        self.assertIn("text/plain", export_res.content_type)
+        self.assertIn(b"Algorithms", export_res.data)
 
 
 if __name__ == "__main__":
