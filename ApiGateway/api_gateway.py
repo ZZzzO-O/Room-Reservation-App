@@ -91,6 +91,9 @@ def create_app(
     if not app_users:
         auth.seed_default_users(app_users)
 
+    if rooms is None:
+        load_cmkl_rooms(app_rooms)
+
     def get_token_from_header() -> Optional[str]:
         """Extract Bearer token from the Authorization header."""
         auth_header = request.headers.get("Authorization", "")
@@ -127,6 +130,43 @@ def create_app(
                 return func(user, *args, **kwargs)
             return wrapper
         return decorator
+
+    # ---------------------------------------------------------
+    # Root & Diagnostic Route
+    # ---------------------------------------------------------
+
+    @app.route("/", methods=["GET"])
+    def root() -> Tuple[Response, int]:
+        """Root endpoint returning API status and endpoints directory."""
+        return jsonify({
+            "name": "CMKL Classroom Reservation API Gateway",
+            "version": "1.0.0",
+            "status": "online",
+            "team": "Vibranium",
+            "message": "API Gateway is running and ready for requests.",
+            "endpoints": {
+                "auth": [
+                    "POST /api/auth/login",
+                    "POST /api/auth/logout",
+                    "GET /api/auth/me",
+                ],
+                "rooms": [
+                    "GET /api/rooms",
+                    "POST /api/rooms",
+                    "GET /api/rooms/<id>",
+                    "PUT /api/rooms/<id>",
+                    "DELETE /api/rooms/<id>",
+                    "POST /api/rooms/<id>/unavailable",
+                    "GET /api/rooms/available",
+                    "GET /api/rooms/recommend",
+                    "POST /api/rooms/seed",
+                ],
+            },
+            "test_accounts": {
+                "staff": "staff1@cmkl.ac.th (Password: Test@1234)",
+                "professor": "prof1@cmkl.ac.th (Password: Test@1234)",
+            },
+        }), 200
 
     # ---------------------------------------------------------
     # Authentication Routes (OBJ-01)

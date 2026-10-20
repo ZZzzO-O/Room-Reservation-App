@@ -51,6 +51,14 @@ class ApiGatewayTestCase(unittest.TestCase):
 class TestAuthEndpoints(ApiGatewayTestCase):
     """Test suite covering authentication API routes."""
 
+    def test_root_endpoint_returns_directory(self) -> None:
+        """GET / returns 200 with online status and endpoints."""
+        res = self.client.get("/")
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertEqual(data["status"], "online")
+        self.assertIn("endpoints", data)
+
     def test_login_valid_credentials(self) -> None:
         """POST /api/auth/login with valid data returns 200 and token."""
         res = self.client.post(
