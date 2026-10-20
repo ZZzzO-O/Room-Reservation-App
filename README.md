@@ -69,16 +69,17 @@ Server runs at `http://127.0.0.1:5000` with CORS enabled for the React frontend.
 
 ## Testing & Quality Assurance
 
-### Run All Unit Tests (86 tests across all services)
+### Run All Unit Tests
 ```bash
 python -m unittest discover -s RoomService
 python -m unittest discover -s AuthService
 python -m unittest discover -s ApiGateway
+python -m unittest discover -s Reservation -t .
 ```
 
 ### Run Coding Standard Lint Checks (PEP 8, 79-character limit)
 ```bash
-flake8 --max-line-length=79 RoomService AuthService ApiGateway
+flake8 --max-line-length=79 RoomService AuthService ApiGateway Reservation
 ```
 
 ### Run Test Coverage
@@ -86,5 +87,6 @@ flake8 --max-line-length=79 RoomService AuthService ApiGateway
 coverage run -m unittest discover -s RoomService
 coverage run -a -m unittest discover -s AuthService
 coverage run -a -m unittest discover -s ApiGateway
+coverage run -a -m unittest discover -s Reservation -t .
 coverage report -m
 ```

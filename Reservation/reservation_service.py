@@ -9,7 +9,7 @@ from dataclasses import replace
 from datetime import date, time
 from typing import List, Optional, Protocol
 
-from reservation_data import (
+from .reservation_data import (
     Repetition,
     Reservation,
     ReservationError,

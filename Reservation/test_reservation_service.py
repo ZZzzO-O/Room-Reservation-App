@@ -10,14 +10,14 @@ from datetime import date, time
 from typing import Dict, Optional
 
 
-from reservation_data import (
+from .reservation_data import (
     DuplicateReservationError,
     Repetition,
     Reservation,
     ReservationNotFoundError,
     ReservationRepository,
 )
-from reservation_service import (
+from .reservation_service import (
     CapacityExceededError,
     InvalidReservationError,
     ReservationConflictError,
