@@ -1,0 +1,4 @@
+# Python dependencies for Classroom Reservation Application (Team Vibranium)
+openpyxl>=3.1.2
+flake8>=7.0.0
+coverage>=7.4.0
