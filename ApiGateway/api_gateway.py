@@ -1,24 +1,24 @@
 # file: api_gateway.py
-# purpose: REST API Gateway and Network Service routing for the web app
+# purpose: API Gateway + Network Service: receive HTTP requests, check the
+#          login token with the Auth Service, and route to the right service
 # author: Thiri Htet Thwe (Thiri)
 # date: 2026-10-20
 
+from dataclasses import dataclass
 from datetime import date, time
 from functools import wraps
+import os
 from pathlib import Path
 import sqlite3
 import sys
 from typing import Any, Callable, Dict, Optional, Tuple
 
-from flask import Flask, jsonify, request, Response
+from flask import Blueprint, Flask, Response, current_app, g, jsonify, request
 from flask_cors import CORS
 
-# Add sibling directories to sys.path
 BASE_DIR = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(BASE_DIR / "RoomService"))
-sys.path.insert(0, str(BASE_DIR / "AuthService"))
-sys.path.insert(0, str(BASE_DIR / "Reservation"))
-sys.path.insert(0, str(BASE_DIR / "Database"))
+for folder in ("RoomService", "AuthService", "Reservation", "Database"):
+    sys.path.insert(0, str(BASE_DIR / folder))
 
 import auth_service as auth  # noqa: E402
 import database as db  # noqa: E402
@@ -26,33 +26,145 @@ import reservation_data as rdata  # noqa: E402
 import reservation_service as rservice  # noqa: E402
 import room_service as rs  # noqa: E402
 from seed_rooms import load_cmkl_rooms  # noqa: E402
+from seed_users import load_test_users  # noqa: E402
+
+EQUIPMENT_KEYS = ("projector", "mic", "whiteboard", "tv_screen")
+
+# Which HTTP status each service error becomes. Flask picks the most
+# specific match, so subclasses are handled correctly.
+ERROR_STATUS = {
+    ValueError: 400,
+    TypeError: 400,
+    auth.InvalidCredentialsError: 401,
+    auth.InvalidSessionError: 401,
+    rs.InvalidRoomError: 400,
+    rs.RoomNotFoundError: 404,
+    rs.DuplicateRoomError: 409,
+    rservice.InvalidReservationError: 400,
+    rservice.CapacityExceededError: 400,
+    rservice.RoomNotFoundError: 404,
+    rdata.ReservationNotFoundError: 404,
+}
+
+api = Blueprint("api", __name__, url_prefix="/api")
 
 
-def parse_date(date_str: str) -> date:
+@dataclass
+class AppState:
+    """Everything the routes need, created once by create_app()."""
+
+    auth: auth.AuthService
+    rooms: Dict[str, rs.Room]
+    reservations: rdata.ReservationRepository
+    booking: rservice.ReservationService
+    conn: sqlite3.Connection
+
+
+class RoomCapacityLookup:
+    """Lets the Reservation Service ask for a room's capacity."""
+
+    def __init__(self, rooms: Dict[str, rs.Room]) -> None:
+        """
+        Keep a reference to the shared room dictionary.
+
+        Args:
+            rooms (Dict[str, rs.Room]): Rooms keyed by room id.
+        """
+        self.rooms = rooms
+
+    def get_room_capacity(self, room_id: str) -> Optional[int]:
+        """
+        Return the room's capacity, or None if the room does not exist.
+
+        Args:
+            room_id (str): Room id.
+
+        Returns:
+            Optional[int]: Capacity, or None.
+        """
+        room = self.rooms.get(room_id)
+        return room.capacity if room else None
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def state() -> AppState:
     """
-    Parse an ISO date string (YYYY-MM-DD) into a date object.
-
-    Args:
-        date_str (str): Date string in YYYY-MM-DD format.
+    Return the shared state of the running app.
 
     Returns:
-        date: Parsed date object.
-
-    Raises:
-        ValueError: If format is invalid.
+        AppState: Shared services and data.
     """
-    return date.fromisoformat(date_str.strip())
+    return current_app.config["STATE"]
+
+
+def error(message: str, status: int) -> Tuple[Response, int]:
+    """
+    Build the standard JSON error response.
+
+    Args:
+        message (str): Message shown to the user.
+        status (int): HTTP status code.
+
+    Returns:
+        Tuple[Response, int]: {"error": message} and the status.
+    """
+    return jsonify({"error": message}), status
+
+
+def body() -> Dict[str, Any]:
+    """
+    Return the request's JSON body, or {} if there is none.
+
+    Returns:
+        Dict[str, Any]: Parsed JSON body.
+    """
+    return request.get_json(silent=True) or {}
+
+
+def save(save_function: Callable, *args: Any) -> None:
+    """
+    Write a change to SQLite.
+
+    TODO(team): move these writes into the Room and Reservation services so
+    the gateway never touches the database (reviewer feedback, Lab 5).
+
+    Args:
+        save_function (Callable): A database.py function taking conn first.
+        *args (Any): The other arguments for that function.
+    """
+    save_function(state().conn, *args)
+
+
+def user_to_dict(user: auth.User) -> Dict[str, str]:
+    """
+    Convert a User to JSON, leaving out the password hash and salt.
+
+    Args:
+        user (auth.User): User to convert.
+
+    Returns:
+        Dict[str, str]: Public user fields.
+    """
+    return {
+        "user_id": user.user_id,
+        "email": user.email,
+        "role": user.role,
+        "name": user.name,
+    }
 
 
 def room_to_dict(room: rs.Room) -> Dict[str, Any]:
     """
-    Serialize a Room dataclass instance into a JSON-compatible dictionary.
+    Convert a Room to JSON.
 
     Args:
-        room (rs.Room): Room dataclass instance.
+        room (rs.Room): Room to convert.
 
     Returns:
-        Dict[str, Any]: Serialized dictionary representation.
+        Dict[str, Any]: Room fields, with dates as YYYY-MM-DD strings.
     """
     return {
         "room_id": room.room_id,
@@ -70,40 +182,23 @@ def room_to_dict(room: rs.Room) -> Dict[str, Any]:
     }
 
 
-def parse_time(time_str: str) -> time:
-    """
-    Parse an ISO time string (HH:MM or HH:MM:SS) into a time object.
-
-    Args:
-        time_str (str): Time string.
-
-    Returns:
-        time: Parsed time object.
-
-    Raises:
-        ValueError: If format is invalid.
-    """
-    return time.fromisoformat(time_str.strip())
-
-
 def reservation_to_dict(res: rdata.Reservation) -> Dict[str, Any]:
     """
-    Serialize a Reservation dataclass into a JSON-compatible dictionary.
+    Convert a Reservation to JSON.
 
     Args:
-        res (rdata.Reservation): Reservation dataclass instance.
+        res (rdata.Reservation): Reservation to convert.
 
     Returns:
-        Dict[str, Any]: Serialized dictionary representation.
+        Dict[str, Any]: Reservation fields as JSON-friendly values.
     """
-    end_d_str = res.end_date.isoformat() if res.end_date else None
     return {
         "reservation_id": res.reservation_id,
         "competency": res.competency,
         "room_id": res.room_id,
         "group_size": res.group_size,
         "start_date": res.start_date.isoformat(),
-        "end_date": end_d_str,
+        "end_date": res.end_date.isoformat() if res.end_date else None,
         "start_time": res.start_time.strftime("%H:%M"),
         "end_time": res.end_time.strftime("%H:%M"),
         "day_of_week": res.day_of_week.value,
@@ -111,721 +206,558 @@ def reservation_to_dict(res: rdata.Reservation) -> Dict[str, Any]:
     }
 
 
-class AppRoomCapacityProvider:
-    """Adapter allowing ReservationService to query room capacities."""
-
-    def __init__(self, rooms: Dict[str, rs.Room]) -> None:
-        """
-        Store reference to the rooms dictionary.
-
-        Args:
-            rooms (Dict[str, rs.Room]): Shared room dictionary.
-        """
-        self._rooms = rooms
-
-    def get_room_capacity(self, room_id: str) -> Optional[int]:
-        """
-        Look up capacity for room_id.
-
-        Args:
-            room_id (str): Room identifier.
-
-        Returns:
-            Optional[int]: Capacity or None if not found.
-        """
-        room = self._rooms.get(room_id)
-        return room.capacity if room is not None else None
-
-
-def create_app(
-    users: Optional[Dict[str, auth.User]] = None,
-    sessions: Optional[Dict[str, auth.Session]] = None,
-    rooms: Optional[Dict[str, rs.Room]] = None,
-    reservations: Optional[rdata.ReservationRepository] = None,
-    db_path: Optional[str] = None,
-) -> Flask:
+def to_date(text: Any) -> date:
     """
-    Application factory for the API Gateway and Network Service.
-
-    Supports optional SQLite database persistence for long-term storage
-    (retaining records across semesters / 4-year cycle).
+    Convert "YYYY-MM-DD" text to a date.
 
     Args:
-        users (Optional[Dict[str, auth.User]]): Pre-existing user store.
-        sessions (Optional[Dict[str, auth.Session]]): Session store.
-        rooms (Optional[Dict[str, rs.Room]]): Room data store.
-        reservations (Optional[rdata.ReservationRepository]): Repository.
-        db_path (Optional[str]): Path to SQLite database file or ':memory:'.
+        text (Any): Text from the request.
 
     Returns:
-        Flask: Configured and route-registered Flask application.
+        date: Parsed date.
+
+    Raises:
+        ValueError: If the text is not a valid date.
     """
+    try:
+        return date.fromisoformat(str(text).strip())
+    except ValueError:
+        raise ValueError(f"Invalid date '{text}'. Use YYYY-MM-DD.") from None
+
+
+def to_time(text: Any) -> time:
+    """
+    Convert "HH:MM" text to a time.
+
+    Args:
+        text (Any): Text from the request.
+
+    Returns:
+        time: Parsed time.
+
+    Raises:
+        ValueError: If the text is not a valid time.
+    """
+    try:
+        return time.fromisoformat(str(text).strip())
+    except ValueError:
+        raise ValueError(f"Invalid time '{text}'. Use HH:MM.") from None
+
+
+def to_int(text: Any) -> int:
+    """
+    Convert text such as "30" to a whole number.
+
+    Args:
+        text (Any): Text or number from the request.
+
+    Returns:
+        int: Parsed number.
+
+    Raises:
+        ValueError: If the text is not a whole number.
+    """
+    try:
+        return int(text)
+    except (TypeError, ValueError):
+        raise ValueError(f"'{text}' is not a whole number.") from None
+
+
+def search_args() -> Tuple[int, date, date, Dict[str, int]]:
+    """
+    Read room-search options from the URL query string.
+
+    Returns:
+        Tuple[int, date, date, Dict[str, int]]:
+            group size, start date, end date, required equipment.
+
+    Raises:
+        ValueError: If group_size or a date is missing or badly formed.
+    """
+    args = request.args
+    equipment = {
+        key: int(args[key])
+        for key in EQUIPMENT_KEYS
+        if args.get(key, "").isdigit()
+    }
+    return (
+        to_int(args.get("group_size", "1")),
+        to_date(args.get("start_date", "")),
+        to_date(args.get("end_date", "")),
+        equipment,
+    )
+
+
+def reservation_from_json(
+    data: Dict[str, Any], old: Optional[rdata.Reservation] = None
+) -> rdata.Reservation:
+    """
+    Build a Reservation from a request body.
+
+    When creating (old is None), missing dates/times are an error.
+    When editing, any field left out keeps its old value.
+
+    Args:
+        data (Dict[str, Any]): Request body.
+        old (Optional[rdata.Reservation]): Reservation being edited.
+
+    Returns:
+        rdata.Reservation: The new or updated reservation (not saved yet).
+
+    Raises:
+        ValueError: If a required field is missing or badly formed.
+    """
+    def read(
+        key: str, parse: Callable, default: Any = None, required: bool = False
+    ) -> Any:
+        """Read one field: parse it, or fall back to old/default value."""
+        raw = data.get(key)
+        if raw not in (None, ""):
+            return parse(raw)
+        if old is not None:
+            return getattr(old, key)
+        if required:
+            raise ValueError(f"{key} is required.")
+        return default
+
+    return rdata.Reservation(
+        competency=read("competency", str, ""),
+        room_id=read("room_id", str, ""),
+        group_size=read("group_size", to_int, 0),
+        start_date=read("start_date", to_date, required=True),
+        end_date=read("end_date", to_date),
+        start_time=read("start_time", to_time, required=True),
+        end_time=read("end_time", to_time, required=True),
+        repetition=read("repetition", rdata.Repetition,
+                        rdata.Repetition.WEEKLY),
+        reservation_id=old.reservation_id if old else None,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Access checks (decorators)
+# ---------------------------------------------------------------------------
+
+def login_required(view: Callable) -> Callable:
+    """
+    Reject the request with 401 unless it carries a valid token.
+
+    The logged-in user is stored in g.user for the route to use.
+
+    Args:
+        view (Callable): Route function to protect.
+
+    Returns:
+        Callable: Wrapped route function.
+    """
+    @wraps(view)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        header = request.headers.get("Authorization", "")
+        g.token = header.removeprefix("Bearer ").strip()
+        g.user = state().auth.check_token(g.token)
+        return view(*args, **kwargs)
+    return wrapper
+
+
+def staff_only(view: Callable) -> Callable:
+    """
+    Reject the request with 403 unless the user is Staff.
+
+    Must be listed below @login_required.
+
+    Args:
+        view (Callable): Route function to protect.
+
+    Returns:
+        Callable: Wrapped route function.
+    """
+    @wraps(view)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        if g.user.role != auth.ROLE_STAFF:
+            return error("Forbidden: Staff privileges required.", 403)
+        return view(*args, **kwargs)
+    return wrapper
+
+
+# ---------------------------------------------------------------------------
+# Auth routes
+# ---------------------------------------------------------------------------
+
+@api.post("/auth/login")
+def login() -> Tuple[Response, int]:
+    """Log in and return a session token."""
+    data = body()
+    user, session = state().auth.login(
+        data.get("email", ""), data.get("password", "")
+    )
+    return jsonify({
+        "token": session.token,
+        "user": user_to_dict(user),
+        "expires_at": session.expires_at.isoformat(),
+    }), 200
+
+
+@api.post("/auth/logout")
+@login_required
+def logout() -> Tuple[Response, int]:
+    """End the current session."""
+    state().auth.logout(g.token)
+    return jsonify({"message": "Logged out successfully."}), 200
+
+
+@api.get("/auth/me")
+@login_required
+def me() -> Tuple[Response, int]:
+    """Return the logged-in user (same shape as the login response)."""
+    return jsonify({"user": user_to_dict(g.user)}), 200
+
+
+# ---------------------------------------------------------------------------
+# Room routes
+# ---------------------------------------------------------------------------
+
+@api.get("/rooms")
+@login_required
+def list_rooms() -> Tuple[Response, int]:
+    """List all rooms."""
+    rooms = [room_to_dict(room) for room in state().rooms.values()]
+    return jsonify({"rooms": rooms, "total": len(rooms)}), 200
+
+
+@api.post("/rooms")
+@login_required
+@staff_only
+def create_room() -> Tuple[Response, int]:
+    """Add a room (Staff only)."""
+    data = body()
+    room = rs.create_room(
+        state().rooms,
+        room_id=data.get("room_id"),
+        capacity=data.get("capacity"),
+        equipment=data.get("equipment", {}),
+        name=data.get("name", ""),
+    )
+    save(db.save_room, room)
+    return jsonify({
+        "message": "Room created successfully.",
+        "room": room_to_dict(room),
+    }), 201
+
+
+@api.get("/rooms/<room_id>")
+@login_required
+def get_room(room_id: str) -> Tuple[Response, int]:
+    """Show one room."""
+    room = rs.get_room(state().rooms, room_id)
+    return jsonify({"room": room_to_dict(room)}), 200
+
+
+@api.put("/rooms/<room_id>")
+@login_required
+@staff_only
+def edit_room(room_id: str) -> Tuple[Response, int]:
+    """Change a room's capacity, equipment, or name (Staff only)."""
+    data = body()
+    room = rs.edit_room(
+        state().rooms,
+        room_id=room_id,
+        capacity=data.get("capacity"),
+        equipment=data.get("equipment"),
+        name=data.get("name"),
+    )
+    save(db.save_room, room)
+    return jsonify({
+        "message": "Room updated successfully.",
+        "room": room_to_dict(room),
+    }), 200
+
+
+@api.delete("/rooms/<room_id>")
+@login_required
+@staff_only
+def delete_room(room_id: str) -> Tuple[Response, int]:
+    """Delete a room (Staff only)."""
+    rs.delete_room(state().rooms, room_id)
+    save(db.delete_room, room_id)
+    return jsonify({"message": f"Room {room_id} deleted."}), 200
+
+
+@api.post("/rooms/<room_id>/unavailable")
+@login_required
+@staff_only
+def mark_unavailable(room_id: str) -> Tuple[Response, int]:
+    """Close a room for a date range (Staff only)."""
+    data = body()
+    period = rs.mark_room_unavailable(
+        state().rooms,
+        room_id,
+        to_date(data.get("start_date", "")),
+        to_date(data.get("end_date", "")),
+        data.get("reason", ""),
+    )
+    save(db.save_unavailable_period, room_id, period)
+    return jsonify({
+        "message": "Room marked unavailable.",
+        "unavailable_period": {
+            "start_date": period.start_date.isoformat(),
+            "end_date": period.end_date.isoformat(),
+            "reason": period.reason,
+        },
+    }), 201
+
+
+@api.get("/rooms/available")
+@login_required
+def available_rooms() -> Tuple[Response, int]:
+    """List rooms that fit the group, have the equipment, and are open."""
+    rooms = rs.find_available_rooms(state().rooms, *search_args())
+    return jsonify({
+        "rooms": [room_to_dict(room) for room in rooms],
+        "total": len(rooms),
+    }), 200
+
+
+@api.get("/rooms/recommend")
+@login_required
+def recommend_room() -> Tuple[Response, int]:
+    """Suggest the smallest room that fits."""
+    best = rs.recommend_room(state().rooms, *search_args())
+    return jsonify({
+        "recommended_room": room_to_dict(best) if best else None
+    }), 200
+
+
+@api.post("/rooms/seed")
+@login_required
+@staff_only
+def seed_rooms() -> Tuple[Response, int]:
+    """Load the standard CMKL rooms (Staff only)."""
+    load_cmkl_rooms(state().rooms)
+    for room in state().rooms.values():
+        save(db.save_room, room)
+    return jsonify({
+        "message": "Seeded official CMKL rooms.",
+        "total_rooms": len(state().rooms),
+    }), 200
+
+
+# ---------------------------------------------------------------------------
+# Reservation routes
+# ---------------------------------------------------------------------------
+
+@api.get("/reservations")
+@login_required
+def list_reservations() -> Tuple[Response, int]:
+    """List reservations, optionally only for one room."""
+    room_id = request.args.get("room_id")
+    found = (
+        state().reservations.get_by_room(room_id)
+        if room_id
+        else state().booking.get_all_reservations()
+    )
+    items = [reservation_to_dict(res) for res in found]
+    return jsonify({"reservations": items, "total": len(items)}), 200
+
+
+@api.post("/reservations")
+@login_required
+def create_reservation() -> Tuple[Response, int]:
+    """Book a room; the Reservation Service checks conflicts and size."""
+    created = state().booking.create_reservation(
+        reservation_from_json(body())
+    )
+    save(db.save_reservation, created)
+    return jsonify({
+        "message": "Reservation created successfully.",
+        "reservation": reservation_to_dict(created),
+    }), 201
+
+
+@api.get("/reservations/search")
+@login_required
+def search_reservations() -> Tuple[Response, int]:
+    """Find reservations by competency name."""
+    found = state().booking.search_by_competency(
+        request.args.get("competency", "")
+    )
+    items = [reservation_to_dict(res) for res in found]
+    return jsonify({"reservations": items, "total": len(items)}), 200
+
+
+@api.get("/reservations/schedule")
+@login_required
+def schedule() -> Tuple[Response, int]:
+    """Show one week's schedule, optionally for one room."""
+    week_start = to_date(request.args.get("week_start", ""))
+    room_id = request.args.get("room_id")
+    items = [
+        reservation_to_dict(res)
+        for res in state().booking.get_schedule(week_start, room_id)
+    ]
+    return jsonify({
+        "week_start": week_start.isoformat(),
+        "room_id": room_id,
+        "schedule": items,
+        "total": len(items),
+    }), 200
+
+
+@api.get("/reservations/export")
+@login_required
+def export_schedule() -> Response:
+    """Download one week's schedule as a text file."""
+    week_start = to_date(request.args.get("week_start", ""))
+    text = state().booking.export_schedule_text(
+        week_start, request.args.get("room_id")
+    )
+    filename = f"schedule_{week_start.isoformat()}.txt"
+    return Response(
+        text,
+        mimetype="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@api.get("/reservations/<reservation_id>")
+@login_required
+def get_reservation(reservation_id: str) -> Tuple[Response, int]:
+    """Show one reservation."""
+    res = state().booking.get_reservation(reservation_id)
+    return jsonify({"reservation": reservation_to_dict(res)}), 200
+
+
+@api.put("/reservations/<reservation_id>")
+@login_required
+def edit_reservation(reservation_id: str) -> Tuple[Response, int]:
+    """Change a reservation; fields left out keep their old values."""
+    old = state().booking.get_reservation(reservation_id)
+    saved = state().booking.edit_reservation(
+        reservation_from_json(body(), old)
+    )
+    save(db.save_reservation, saved)
+    return jsonify({
+        "message": "Reservation updated successfully.",
+        "reservation": reservation_to_dict(saved),
+    }), 200
+
+
+@api.delete("/reservations/<reservation_id>")
+@login_required
+def delete_reservation(reservation_id: str) -> Tuple[Response, int]:
+    """Delete a reservation."""
+    state().booking.delete_reservation(reservation_id)
+    save(db.delete_reservation, reservation_id)
+    return jsonify({
+        "message": f"Reservation {reservation_id} deleted."
+    }), 200
+
+
+# ---------------------------------------------------------------------------
+# App setup
+# ---------------------------------------------------------------------------
+
+def register_error_handlers(app: Flask) -> None:
+    """
+    Turn service errors into JSON error responses in one place.
+
+    Args:
+        app (Flask): The app to configure.
+    """
+    for error_type, status in ERROR_STATUS.items():
+        app.register_error_handler(
+            error_type,
+            lambda err, status=status: error(str(err), status),
+        )
+
+    @app.errorhandler(rservice.ReservationConflictError)
+    def conflict(err: rservice.ReservationConflictError) -> Any:
+        """Return 409 plus the reservation that is in the way."""
+        return jsonify({
+            "error": str(err),
+            "conflicting_reservation": reservation_to_dict(
+                err.conflicting_reservation
+            ),
+        }), 409
+
+
+def load_data(conn: sqlite3.Connection) -> AppState:
+    """
+    Load all data from SQLite, adding sample rooms and users if empty.
+
+    Args:
+        conn (sqlite3.Connection): Open database.
+
+    Returns:
+        AppState: All services, ready to use.
+    """
+    rooms = db.load_rooms(conn)
+    if not rooms:
+        load_cmkl_rooms(rooms)
+        for room in rooms.values():
+            db.save_room(conn, room)
+
+    reservations = rdata.ReservationRepository()
+    for res in db.load_reservations(conn).values():
+        reservations.add_reservation(res)
+
+    auth_service = auth.AuthService(conn)
+    if not auth_service.users:
+        load_test_users(auth_service)
+
+    return AppState(
+        auth=auth_service,
+        rooms=rooms,
+        reservations=reservations,
+        booking=rservice.ReservationService(
+            reservations, RoomCapacityLookup(rooms)
+        ),
+        conn=conn,
+    )
+
+
+def create_app(db_path: str = str(BASE_DIR / db.DEFAULT_DB_FILE)) -> Flask:
+    """
+    Build the Flask app.
+
+    Args:
+        db_path (str): SQLite file, or ":memory:" for a throwaway database
+            (used by tests).
+
+    Returns:
+        Flask: The configured app.
+    """
+    conn = db.get_connection(db_path)
+    db.init_db(conn)
+
     app = Flask(__name__)
     CORS(app)
+    app.config["STATE"] = load_data(conn)
+    app.register_blueprint(api)
+    register_error_handlers(app)
 
-    # Initialize SQLite connection if db_path or default standalone startup
-    conn: Optional[sqlite3.Connection] = None
-    target_db = db_path
-    if target_db is None and users is None and rooms is None:
-        target_db = str(BASE_DIR / db.DEFAULT_DB_FILE)
-
-    if target_db is not None:
-        conn = db.get_connection(target_db)
-        db.init_db(conn)
-
-    app.conn = conn  # type: ignore[attr-defined]
-
-    # Initialize shared stores
-    app_users: Dict[str, auth.User] = {} if users is None else users
-    app_sessions: Dict[str, auth.Session] = (
-        {} if sessions is None else sessions
-    )
-    app_rooms: Dict[str, rs.Room] = {} if rooms is None else rooms
-    app_res_repo: rdata.ReservationRepository = (
-        rdata.ReservationRepository()
-        if reservations is None
-        else reservations
-    )
-    capacity_provider = AppRoomCapacityProvider(app_rooms)
-    res_service = rservice.ReservationService(
-        app_res_repo, capacity_provider
-    )
-    app.res_service = res_service  # type: ignore[attr-defined]
-    app.res_repo = app_res_repo  # type: ignore[attr-defined]
-
-    # Load from or populate SQLite
-    if conn is not None:
-        loaded_users = db.load_users(conn)
-        if loaded_users:
-            app_users.update(loaded_users)
-        else:
-            auth.seed_default_users(app_users)
-            for u in app_users.values():
-                db.save_user(conn, u)
-
-        loaded_rooms = db.load_rooms(conn)
-        if loaded_rooms:
-            app_rooms.update(loaded_rooms)
-        else:
-            load_cmkl_rooms(app_rooms)
-            for r in app_rooms.values():
-                db.save_room(conn, r)
-
-        loaded_reservations = db.load_reservations(conn)
-        for res_obj in loaded_reservations.values():
-            if app_res_repo.get_by_id(res_obj.reservation_id) is None:
-                app_res_repo.add_reservation(res_obj)
-
-        app_sessions.update(db.load_sessions(conn))
-    else:
-        if not app_users:
-            auth.seed_default_users(app_users)
-        if rooms is None:
-            load_cmkl_rooms(app_rooms)
-
-    def get_token_from_header() -> Optional[str]:
-        """Extract Bearer token from the Authorization header."""
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            return auth_header[7:].strip()
-        return None
-
-    def require_auth(func: Callable) -> Callable:
-        """Decorator verifying that an incoming request is authenticated."""
-        @wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Tuple[Response, int]:
-            token = get_token_from_header()
-            if not token:
-                return jsonify({"error": "Authentication required."}), 401
-            try:
-                user = auth.validate_session(app_users, app_sessions, token)
-            except auth.InvalidSessionError as err:
-                return jsonify({"error": str(err)}), 401
-            return func(user, *args, **kwargs)
-        return wrapper
-
-    def require_role(required_role: str) -> Callable:
-        """Decorator restricting route access to a specific role."""
-        def decorator(func: Callable) -> Callable:
-            @wraps(func)
-            def wrapper(
-                user: auth.User, *args: Any, **kwargs: Any
-            ) -> Tuple[Response, int]:
-                if user.role != required_role:
-                    msg = (
-                        f"Forbidden: {required_role} privileges required."
-                    )
-                    return jsonify({"error": msg}), 403
-                return func(user, *args, **kwargs)
-            return wrapper
-        return decorator
-
-    # ---------------------------------------------------------
-    # Root & Diagnostic Route
-    # ---------------------------------------------------------
-
-    @app.route("/", methods=["GET"])
+    @app.get("/")
     def root() -> Tuple[Response, int]:
-        """Root endpoint returning API status and endpoints directory."""
-        storage_type = "SQLite (app.db)" if conn else "In-Memory"
+        """Health check: lists every endpoint."""
+        endpoints = sorted(
+            f"{method} {rule.rule}"
+            for rule in app.url_map.iter_rules()
+            if rule.rule.startswith("/api")
+            for method in rule.methods - {"HEAD", "OPTIONS"}
+        )
         return jsonify({
             "name": "CMKL Classroom Reservation API Gateway",
-            "version": "1.0.0",
             "status": "online",
-            "team": "Vibranium",
-            "storage": storage_type,
-            "message": "API Gateway is running and ready for requests.",
-            "endpoints": {
-                "auth": [
-                    "POST /api/auth/login",
-                    "POST /api/auth/logout",
-                    "GET /api/auth/me",
-                ],
-                "rooms": [
-                    "GET /api/rooms",
-                    "POST /api/rooms",
-                    "GET /api/rooms/<id>",
-                    "PUT /api/rooms/<id>",
-                    "DELETE /api/rooms/<id>",
-                    "POST /api/rooms/<id>/unavailable",
-                    "GET /api/rooms/available",
-                    "GET /api/rooms/recommend",
-                    "POST /api/rooms/seed",
-                ],
-                "reservations": [
-                    "GET /api/reservations",
-                    "POST /api/reservations",
-                    "GET /api/reservations/<id>",
-                    "PUT /api/reservations/<id>",
-                    "DELETE /api/reservations/<id>",
-                    "GET /api/reservations/search",
-                    "GET /api/reservations/schedule",
-                    "GET /api/reservations/export",
-                ],
-            },
-            "test_accounts": {
-                "staff": "staff1@cmkl.ac.th (Password: Test@1234)",
-                "professor": "prof1@cmkl.ac.th (Password: Test@1234)",
-            },
+            "endpoints": endpoints,
         }), 200
-
-    # ---------------------------------------------------------
-    # Authentication Routes (OBJ-01)
-    # ---------------------------------------------------------
-
-    @app.route("/api/auth/login", methods=["POST"])
-    def api_login() -> Tuple[Response, int]:
-        """Authenticate user and return active session token."""
-        data = request.get_json(silent=True) or {}
-        email = data.get("email", "")
-        password = data.get("password", "")
-        try:
-            user, session = auth.authenticate(
-                app_users, app_sessions, email, password
-            )
-            if conn is not None:
-                db.save_session(conn, session)
-
-            return jsonify({
-                "token": session.token,
-                "user": {
-                    "user_id": user.user_id,
-                    "email": user.email,
-                    "role": user.role,
-                    "name": user.name,
-                },
-                "expires_at": session.expires_at.isoformat(),
-            }), 200
-        except auth.InvalidCredentialsError as err:
-            return jsonify({"error": str(err)}), 401
-
-    @app.route("/api/auth/logout", methods=["POST"])
-    @require_auth
-    def api_logout(user: auth.User) -> Tuple[Response, int]:
-        """Revoke active session token."""
-        token = get_token_from_header() or ""
-        auth.terminate_session(app_sessions, token)
-        if conn is not None:
-            db.delete_session(conn, token)
-        return jsonify({"message": "Logged out successfully."}), 200
-
-    @app.route("/api/auth/me", methods=["GET"])
-    @require_auth
-    def api_me(user: auth.User) -> Tuple[Response, int]:
-        """Return the profile of the currently logged-in user."""
-        return jsonify({
-            "user_id": user.user_id,
-            "email": user.email,
-            "role": user.role,
-            "name": user.name,
-        }), 200
-
-    # ---------------------------------------------------------
-    # Room Management Routes (OBJ-02 & OBJ-03)
-    # ---------------------------------------------------------
-
-    @app.route("/api/rooms", methods=["GET"])
-    @require_auth
-    def list_rooms(user: auth.User) -> Tuple[Response, int]:
-        """Retrieve all registered rooms."""
-        room_list = [room_to_dict(r) for r in app_rooms.values()]
-        return jsonify({"rooms": room_list, "total": len(room_list)}), 200
-
-    @app.route("/api/rooms", methods=["POST"])
-    @require_auth
-    @require_role(auth.ROLE_STAFF)
-    def api_create_room(user: auth.User) -> Tuple[Response, int]:
-        """Create a new room (Staff only)."""
-        data = request.get_json(silent=True) or {}
-        room_id = data.get("room_id")
-        capacity = data.get("capacity")
-        equipment = data.get("equipment", {})
-        name = data.get("name", "")
-
-        try:
-            room = rs.create_room(
-                app_rooms,
-                room_id=room_id,
-                capacity=capacity,
-                equipment=equipment,
-                name=name,
-            )
-            if conn is not None:
-                db.save_room(conn, room)
-
-            return jsonify({
-                "message": "Room created successfully.",
-                "room": room_to_dict(room),
-            }), 201
-        except rs.DuplicateRoomError as err:
-            return jsonify({"error": str(err)}), 409
-        except rs.InvalidRoomError as err:
-            return jsonify({"error": str(err)}), 400
-
-    @app.route("/api/rooms/<room_id>", methods=["GET"])
-    @require_auth
-    def api_get_room(user: auth.User, room_id: str) -> Tuple[Response, int]:
-        """Retrieve details of a single room."""
-        try:
-            room = rs.get_room(app_rooms, room_id)
-            return jsonify({"room": room_to_dict(room)}), 200
-        except rs.RoomNotFoundError as err:
-            return jsonify({"error": str(err)}), 404
-
-    @app.route("/api/rooms/<room_id>", methods=["PUT"])
-    @require_auth
-    @require_role(auth.ROLE_STAFF)
-    def api_edit_room(user: auth.User, room_id: str) -> Tuple[Response, int]:
-        """Update an existing room (Staff only)."""
-        data = request.get_json(silent=True) or {}
-        capacity = data.get("capacity")
-        equipment = data.get("equipment")
-        name = data.get("name")
-        try:
-            room = rs.edit_room(
-                app_rooms,
-                room_id=room_id,
-                capacity=capacity,
-                equipment=equipment,
-                name=name,
-            )
-            if conn is not None:
-                db.save_room(conn, room)
-
-            return jsonify({
-                "message": "Room updated successfully.",
-                "room": room_to_dict(room),
-            }), 200
-        except rs.RoomNotFoundError as err:
-            return jsonify({"error": str(err)}), 404
-        except rs.InvalidRoomError as err:
-            return jsonify({"error": str(err)}), 400
-
-    @app.route("/api/rooms/<room_id>", methods=["DELETE"])
-    @require_auth
-    @require_role(auth.ROLE_STAFF)
-    def api_delete_room(
-        user: auth.User, room_id: str
-    ) -> Tuple[Response, int]:
-        """Delete an existing room (Staff only)."""
-        try:
-            rs.delete_room(app_rooms, room_id)
-            if conn is not None:
-                db.delete_room(conn, room_id)
-            return jsonify({"message": f"Room {room_id} deleted."}), 200
-        except rs.RoomNotFoundError as err:
-            return jsonify({"error": str(err)}), 404
-
-    @app.route("/api/rooms/<room_id>/unavailable", methods=["POST"])
-    @require_auth
-    @require_role(auth.ROLE_STAFF)
-    def api_mark_unavailable(
-        user: auth.User, room_id: str
-    ) -> Tuple[Response, int]:
-        """Mark a room closed for a date range (Staff only)."""
-        data = request.get_json(silent=True) or {}
-        raw_start = data.get("start_date")
-        raw_end = data.get("end_date")
-        reason = data.get("reason", "")
-        if not raw_start or not raw_end:
-            return jsonify({"error": "start_date and end_date required."}), 400
-        try:
-            start_d = parse_date(raw_start)
-            end_d = parse_date(raw_end)
-            period = rs.mark_room_unavailable(
-                app_rooms, room_id, start_d, end_d, reason
-            )
-            if conn is not None:
-                db.save_unavailable_period(conn, room_id, period)
-
-            return jsonify({
-                "message": "Room marked unavailable.",
-                "unavailable_period": {
-                    "start_date": period.start_date.isoformat(),
-                    "end_date": period.end_date.isoformat(),
-                    "reason": period.reason,
-                },
-            }), 201
-        except ValueError:
-            msg = "Invalid date format. Use YYYY-MM-DD."
-            return jsonify({"error": msg}), 400
-        except rs.RoomNotFoundError as err:
-            return jsonify({"error": str(err)}), 404
-        except rs.InvalidRoomError as err:
-            return jsonify({"error": str(err)}), 400
-
-    # ---------------------------------------------------------
-    # Search & Recommendation Routes
-    # ---------------------------------------------------------
-
-    @app.route("/api/rooms/available", methods=["GET"])
-    @require_auth
-    def api_find_available(user: auth.User) -> Tuple[Response, int]:
-        """Filter available rooms by capacity, equipment, and dates."""
-        try:
-            raw_group = request.args.get("group_size", "1")
-            group_size = int(raw_group)
-            start_d = parse_date(request.args.get("start_date", ""))
-            end_d = parse_date(request.args.get("end_date", ""))
-        except (ValueError, TypeError):
-            return jsonify({
-                "error": "Valid group_size and YYYY-MM-DD dates required."
-            }), 400
-
-        req_equipment: Dict[str, int] = {}
-        for key in ("projector", "mic", "whiteboard", "tv_screen"):
-            val = request.args.get(key)
-            if val is not None and val.isdigit():
-                req_equipment[key] = int(val)
-
-        try:
-            matched = rs.find_available_rooms(
-                app_rooms, group_size, start_d, end_d, req_equipment
-            )
-            return jsonify({
-                "rooms": [room_to_dict(r) for r in matched],
-                "total": len(matched),
-            }), 200
-        except rs.InvalidRoomError as err:
-            return jsonify({"error": str(err)}), 400
-
-    @app.route("/api/rooms/recommend", methods=["GET"])
-    @require_auth
-    def api_recommend(user: auth.User) -> Tuple[Response, int]:
-        """Recommend the optimal tightest-fitting room in O(n) time."""
-        try:
-            raw_group = request.args.get("group_size", "1")
-            group_size = int(raw_group)
-            start_d = parse_date(request.args.get("start_date", ""))
-            end_d = parse_date(request.args.get("end_date", ""))
-        except (ValueError, TypeError):
-            return jsonify({
-                "error": "Valid group_size and YYYY-MM-DD dates required."
-            }), 400
-
-        req_equipment: Dict[str, int] = {}
-        for key in ("projector", "mic", "whiteboard", "tv_screen"):
-            val = request.args.get(key)
-            if val is not None and val.isdigit():
-                req_equipment[key] = int(val)
-
-        try:
-            best = rs.recommend_room(
-                app_rooms, group_size, start_d, end_d, req_equipment
-            )
-            res = room_to_dict(best) if best else None
-            return jsonify({"recommended_room": res}), 200
-        except rs.InvalidRoomError as err:
-            return jsonify({"error": str(err)}), 400
-
-    @app.route("/api/rooms/seed", methods=["POST"])
-    @require_auth
-    @require_role(auth.ROLE_STAFF)
-    def api_seed_rooms(user: auth.User) -> Tuple[Response, int]:
-        """Seed official CMKL campus classrooms (Staff only)."""
-        load_cmkl_rooms(app_rooms)
-        if conn is not None:
-            for r in app_rooms.values():
-                db.save_room(conn, r)
-
-        return jsonify({
-            "message": "Seeded official CMKL rooms.",
-            "total_rooms": len(app_rooms),
-        }), 200
-
-    # ---------------------------------------------------------
-    # Reservation Routes (OBJ-05, OBJ-06, OBJ-07, OBJ-08)
-    # ---------------------------------------------------------
-
-    @app.route("/api/reservations", methods=["GET"])
-    @require_auth
-    def list_reservations(user: auth.User) -> Tuple[Response, int]:
-        """List all reservations, optionally filtered by room."""
-        room_id = request.args.get("room_id")
-        if room_id:
-            res_list = app_res_repo.get_by_room(room_id)
-        else:
-            res_list = res_service.get_all_reservations()
-
-        serialized = [reservation_to_dict(r) for r in res_list]
-        return jsonify({
-            "reservations": serialized,
-            "total": len(serialized),
-        }), 200
-
-    @app.route("/api/reservations", methods=["POST"])
-    @require_auth
-    def api_create_reservation(user: auth.User) -> Tuple[Response, int]:
-        """Create a reservation with conflict & capacity checks."""
-        data = request.get_json(silent=True) or {}
-        competency = data.get("competency", "")
-        room_id = data.get("room_id", "")
-        group_size = data.get("group_size", 0)
-        raw_start_date = data.get("start_date", "")
-        raw_end_date = data.get("end_date")
-        raw_start_time = data.get("start_time", "")
-        raw_end_time = data.get("end_time", "")
-        repetition_str = data.get("repetition", "Weekly")
-
-        try:
-            group_size = int(group_size)
-            start_d = parse_date(raw_start_date)
-            end_d = parse_date(raw_end_date) if raw_end_date else None
-            start_t = parse_time(raw_start_time)
-            end_t = parse_time(raw_end_time)
-            rep = rdata.Repetition(repetition_str)
-        except (ValueError, TypeError) as err:
-            return jsonify({"error": f"Invalid format: {str(err)}"}), 400
-
-        candidate = rdata.Reservation(
-            competency=competency,
-            room_id=room_id,
-            group_size=group_size,
-            start_date=start_d,
-            end_date=end_d,
-            start_time=start_t,
-            end_time=end_t,
-            repetition=rep,
-        )
-
-        try:
-            created = res_service.create_reservation(candidate)
-            if conn is not None:
-                db.save_reservation(conn, created)
-            return jsonify({
-                "message": "Reservation created successfully.",
-                "reservation": reservation_to_dict(created),
-            }), 201
-        except (
-            rservice.InvalidReservationError,
-            rservice.CapacityExceededError,
-        ) as err:
-            return jsonify({"error": str(err)}), 400
-        except rservice.RoomNotFoundError as err:
-            return jsonify({"error": str(err)}), 404
-        except rservice.ReservationConflictError as err:
-            return jsonify({
-                "error": str(err),
-                "conflicting_reservation": reservation_to_dict(
-                    err.conflicting_reservation
-                ),
-            }), 409
-
-    @app.route("/api/reservations/search", methods=["GET"])
-    @require_auth
-    def api_search_reservations(user: auth.User) -> Tuple[Response, int]:
-        """Search reservations by competency name."""
-        query = request.args.get("competency", "")
-        matched = res_service.search_by_competency(query)
-        serialized = [reservation_to_dict(r) for r in matched]
-        return jsonify({
-            "reservations": serialized,
-            "total": len(serialized),
-        }), 200
-
-    @app.route("/api/reservations/schedule", methods=["GET"])
-    @require_auth
-    def api_get_schedule(user: auth.User) -> Tuple[Response, int]:
-        """View schedule for a specific week and optional room."""
-        raw_week = request.args.get("week_start")
-        if not raw_week:
-            msg = "week_start (YYYY-MM-DD) query parameter required."
-            return jsonify({"error": msg}), 400
-        try:
-            week_start = parse_date(raw_week)
-        except ValueError:
-            msg = "Invalid week_start format. Use YYYY-MM-DD."
-            return jsonify({"error": msg}), 400
-
-        room_id = request.args.get("room_id")
-        schedule = res_service.get_schedule(week_start, room_id)
-        serialized = [reservation_to_dict(r) for r in schedule]
-        return jsonify({
-            "week_start": week_start.isoformat(),
-            "room_id": room_id,
-            "schedule": serialized,
-            "total": len(serialized),
-        }), 200
-
-    @app.route("/api/reservations/export", methods=["GET"])
-    @require_auth
-    def api_export_schedule(user: auth.User) -> Response:
-        """Export schedule as a plain text timetable file."""
-        raw_week = request.args.get("week_start")
-        if not raw_week:
-            return jsonify({"error": "week_start query required."}), 400
-        try:
-            week_start = parse_date(raw_week)
-        except ValueError:
-            msg = "Invalid week_start format. Use YYYY-MM-DD."
-            return jsonify({"error": msg}), 400
-
-        room_id = request.args.get("room_id")
-        text_report = res_service.export_schedule_text(week_start, room_id)
-        filename = f"schedule_{week_start.isoformat()}.txt"
-        resp = Response(text_report, mimetype="text/plain; charset=utf-8")
-        resp.headers["Content-Disposition"] = (
-            f'attachment; filename="{filename}"'
-        )
-        return resp
-
-    @app.route("/api/reservations/<reservation_id>", methods=["GET"])
-    @require_auth
-    def api_get_reservation(
-        user: auth.User, reservation_id: str
-    ) -> Tuple[Response, int]:
-        """Get details of a single reservation by ID."""
-        try:
-            res = res_service.get_reservation(reservation_id)
-            return jsonify({"reservation": reservation_to_dict(res)}), 200
-        except rservice.ReservationNotFoundError as err:
-            return jsonify({"error": str(err)}), 404
-
-    @app.route("/api/reservations/<reservation_id>", methods=["PUT"])
-    @require_auth
-    def api_edit_reservation(
-        user: auth.User, reservation_id: str
-    ) -> Tuple[Response, int]:
-        """Update an existing reservation with conflict check."""
-        existing = app_res_repo.get_by_id(reservation_id)
-        if existing is None:
-            msg = f"Reservation with ID '{reservation_id}' not found."
-            return jsonify({"error": msg}), 404
-
-        data = request.get_json(silent=True) or {}
-        competency = data.get("competency", existing.competency)
-        room_id = data.get("room_id", existing.room_id)
-        group_size = data.get("group_size", existing.group_size)
-        raw_start_date = data.get("start_date")
-        raw_end_date = data.get("end_date")
-        raw_start_time = data.get("start_time")
-        raw_end_time = data.get("end_time")
-        repetition_str = data.get("repetition")
-
-        try:
-            group_size = int(group_size)
-            start_d = (
-                parse_date(raw_start_date)
-                if raw_start_date
-                else existing.start_date
-            )
-            end_d = (
-                parse_date(raw_end_date)
-                if raw_end_date is not None
-                else existing.end_date
-            )
-            start_t = (
-                parse_time(raw_start_time)
-                if raw_start_time
-                else existing.start_time
-            )
-            end_t = (
-                parse_time(raw_end_time)
-                if raw_end_time
-                else existing.end_time
-            )
-            rep = (
-                rdata.Repetition(repetition_str)
-                if repetition_str
-                else existing.repetition
-            )
-        except (ValueError, TypeError) as err:
-            return jsonify({"error": f"Invalid format: {str(err)}"}), 400
-
-        updated = rdata.Reservation(
-            reservation_id=reservation_id,
-            competency=competency,
-            room_id=room_id,
-            group_size=group_size,
-            start_date=start_d,
-            end_date=end_d,
-            start_time=start_t,
-            end_time=end_t,
-            repetition=rep,
-        )
-
-        try:
-            saved = res_service.edit_reservation(updated)
-            if conn is not None:
-                db.save_reservation(conn, saved)
-            return jsonify({
-                "message": "Reservation updated successfully.",
-                "reservation": reservation_to_dict(saved),
-            }), 200
-        except (
-            rservice.InvalidReservationError,
-            rservice.CapacityExceededError,
-        ) as err:
-            return jsonify({"error": str(err)}), 400
-        except rservice.RoomNotFoundError as err:
-            return jsonify({"error": str(err)}), 404
-        except rservice.ReservationConflictError as err:
-            return jsonify({
-                "error": str(err),
-                "conflicting_reservation": reservation_to_dict(
-                    err.conflicting_reservation
-                ),
-            }), 409
-
-    @app.route("/api/reservations/<reservation_id>", methods=["DELETE"])
-    @require_auth
-    def api_delete_reservation(
-        user: auth.User, reservation_id: str
-    ) -> Tuple[Response, int]:
-        """Delete an existing reservation."""
-        try:
-            res_service.delete_reservation(reservation_id)
-            if conn is not None:
-                db.delete_reservation(conn, reservation_id)
-            return jsonify({
-                "message": f"Reservation {reservation_id} deleted."
-            }), 200
-        except rservice.ReservationNotFoundError as err:
-            return jsonify({"error": str(err)}), 404
 
     return app
 
 
 if __name__ == "__main__":
-    flask_app = create_app()
-    flask_app.run(host="0.0.0.0", port=5000, debug=True)
+    # Debug mode lets anyone who can reach the server run code, so it is off
+    # unless FLASK_DEBUG=1, and the server only listens on this computer.
+    create_app().run(
+        host="127.0.0.1",
+        port=5000,
+        debug=os.environ.get("FLASK_DEBUG") == "1",
+    )
