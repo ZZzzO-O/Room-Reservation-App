@@ -1,6 +1,7 @@
 # file: database.py
 # purpose: SQLite persistence layer for Room Data, User Data, and sessions
 # author: Thiri Htet Thwe (Thiri)
+# Owner: Micky (rooms), Thiri (users, sessions), Jan (reservations)
 # date: 2026-10-20
 
 from datetime import date, datetime, time
