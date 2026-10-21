@@ -4,43 +4,38 @@
 # date: 2026-10-20
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import hashlib
 import secrets
-from typing import Dict, Optional
+import sqlite3
+from types import ModuleType
+from typing import Dict, Optional, Tuple
 
 ROLE_STAFF = "Staff"
 ROLE_PROFESSOR = "Professor"
-DEFAULT_SESSION_TTL_HOURS = 24
+SESSION_HOURS = 24
+HASH_ROUNDS = 200_000
 
 
 class AuthError(Exception):
-    """Base class for all authentication and authorization errors."""
+    """Base class for every authentication error."""
 
 
 class InvalidCredentialsError(AuthError):
-    """Raised when email or password is missing, invalid, or incorrect."""
-
-
-class UserNotFoundError(AuthError):
-    """Raised when a user account cannot be found."""
-
-
-class UserAlreadyExistsError(AuthError):
-    """Raised when attempting to register an existing email."""
+    """Email or password is missing, badly formed, or wrong."""
 
 
 class InvalidSessionError(AuthError):
-    """Raised when a session token is missing, expired, or invalid."""
+    """Session token is missing, unknown, or expired."""
 
 
-class PermissionDeniedError(AuthError):
-    """Raised when a user lacks the required role for an operation."""
+class UserAlreadyExistsError(AuthError):
+    """An account with this email already exists."""
 
 
 @dataclass(slots=True)
 class User:
-    """A registered user account with credentials and authorization role."""
+    """A registered account. Only the salted hash of the password is kept."""
 
     user_id: str
     email: str
@@ -52,260 +47,216 @@ class User:
 
 @dataclass(slots=True)
 class Session:
-    """An active authenticated session identified by a cryptosecure token."""
+    """A logged-in session, identified by a random token."""
 
     token: str
     user_id: str
     expires_at: datetime
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: utc_now())
+
+
+def utc_now() -> datetime:
+    """
+    Return the current UTC time without a time zone attached.
+
+    Returns:
+        datetime: Current UTC time (naive, to match stored sessions).
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def hash_password(
     password: str, salt: Optional[str] = None
-) -> tuple[str, str]:
+) -> Tuple[str, str]:
     """
-    Hash a plaintext password using SHA-256 with a random cryptographic salt.
+    Hash a password with PBKDF2-SHA256 and a random salt.
 
     Args:
-        password (str): Plaintext password to hash.
-        salt (Optional[str]): Existing hex salt, or None to generate new salt.
+        password (str): Plaintext password.
+        salt (Optional[str]): Existing hex salt, or None to make a new one.
 
     Returns:
-        tuple[str, str]: Tuple of (password_hash, salt).
+        Tuple[str, str]: (password_hash, salt), both as hex strings.
     """
-    if salt is None:
-        salt = secrets.token_hex(16)
-    combined = (salt + password).encode("utf-8")
-    pwd_hash = hashlib.sha256(combined).hexdigest()
-    return pwd_hash, salt
+    salt = salt or secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256", password.encode(), bytes.fromhex(salt), HASH_ROUNDS
+    )
+    return digest.hex(), salt
 
 
 def verify_password(password: str, salt: str, expected_hash: str) -> bool:
     """
-    Check if a plaintext password matches the salted hash in constant time.
+    Check a password against a stored hash in constant time.
 
     Args:
-        password (str): Plaintext candidate password.
-        salt (str): Stored user salt.
-        expected_hash (str): Stored cryptographic hash.
+        password (str): Plaintext password to check.
+        salt (str): Salt stored with the user.
+        expected_hash (str): Hash stored with the user.
 
     Returns:
-        bool: True if passwords match, False otherwise.
+        bool: True if the password is correct.
     """
     computed_hash, _ = hash_password(password, salt)
     return secrets.compare_digest(computed_hash, expected_hash)
 
 
-def validate_email(email: str) -> str:
+def normalize_email(email: str) -> str:
     """
-    Validate and normalize an email address.
+    Trim and lowercase an email, and reject obviously invalid ones.
 
     Args:
-        email (str): Candidate email address.
+        email (str): Email typed by the user.
 
     Returns:
-        str: Lowercased, stripped email string.
+        str: Cleaned email.
 
     Raises:
-        InvalidCredentialsError: If email is empty or missing '@'.
+        InvalidCredentialsError: If the email is empty or has no '@'.
     """
-    if not isinstance(email, str) or not email.strip():
-        raise InvalidCredentialsError("Email must not be empty.")
-    normalized = email.strip().lower()
-    if "@" not in normalized or normalized.startswith("@"):
-        raise InvalidCredentialsError("Invalid email address format.")
-    return normalized
+    if not isinstance(email, str) or "@" not in email.strip()[1:]:
+        raise InvalidCredentialsError("A valid email is required.")
+    return email.strip().lower()
 
 
-def register_user(
-    users: Dict[str, User],
-    email: str,
-    password: str,
-    role: str,
-    name: str = "",
-    user_id: Optional[str] = None,
-) -> User:
-    """
-    Register a new user in the User Data store.
+class AuthService:
+    """Owns User Data and sessions; the API gateway only calls its methods."""
 
-    Args:
-        users (Dict[str, User]): User store keyed by normalized email.
-        email (str): Unique user email address.
-        password (str): Plaintext account password.
-        role (str): System role (e.g., "Staff" or "Professor").
-        name (str): Full display name of the user.
-        user_id (Optional[str]): Custom user ID, or generated hex ID.
+    def __init__(self, conn: Optional[sqlite3.Connection] = None) -> None:
+        """
+        Load users and sessions from SQLite, or start empty in memory.
 
-    Returns:
-        User: Newly registered user record.
+        Sample accounts are added separately by seed_users.py.
 
-    Raises:
-        InvalidCredentialsError: If email or password is empty.
-        UserAlreadyExistsError: If email is already registered.
-    """
-    clean_email = validate_email(email)
-    if not isinstance(password, str) or not password:
-        raise InvalidCredentialsError("Password must not be empty.")
-    if clean_email in users:
-        raise UserAlreadyExistsError(f"User {clean_email} already exists.")
-    if role not in (ROLE_STAFF, ROLE_PROFESSOR):
-        raise InvalidCredentialsError(
-            f"Role must be '{ROLE_STAFF}' or '{ROLE_PROFESSOR}'."
+        Args:
+            conn (Optional[sqlite3.Connection]): Database, or None.
+        """
+        self.conn = conn
+        self.users: Dict[str, User] = {}
+        self.sessions: Dict[str, Session] = {}
+        if conn is not None:
+            self.users = self._db().load_users(conn)
+            self.sessions = self._db().load_sessions(conn)
+
+    def register(
+        self, email: str, password: str, role: str, name: str = ""
+    ) -> User:
+        """
+        Create a new account and save it.
+
+        Args:
+            email (str): Unique email.
+            password (str): Plaintext password.
+            role (str): ROLE_STAFF or ROLE_PROFESSOR.
+            name (str): Display name; defaults to the part before '@'.
+
+        Returns:
+            User: The new account.
+
+        Raises:
+            InvalidCredentialsError: If email, password, or role is invalid.
+            UserAlreadyExistsError: If the email is already registered.
+        """
+        email = normalize_email(email)
+        if not password:
+            raise InvalidCredentialsError("Password must not be empty.")
+        if role not in (ROLE_STAFF, ROLE_PROFESSOR):
+            raise InvalidCredentialsError("Role must be Staff or Professor.")
+        if email in self.users:
+            raise UserAlreadyExistsError(f"User {email} already exists.")
+
+        password_hash, salt = hash_password(password)
+        user = User(
+            user_id=f"USR-{secrets.token_hex(4).upper()}",
+            email=email,
+            password_hash=password_hash,
+            salt=salt,
+            role=role,
+            name=name or email.split("@")[0],
         )
+        self.users[email] = user
+        if self.conn is not None:
+            self._db().save_user(self.conn, user)
+        return user
 
-    pwd_hash, salt = hash_password(password)
-    uid = user_id or f"USR-{secrets.token_hex(4).upper()}"
-    user = User(
-        user_id=uid,
-        email=clean_email,
-        password_hash=pwd_hash,
-        salt=salt,
-        role=role,
-        name=name or clean_email.split("@")[0],
-    )
-    users[clean_email] = user
-    return user
+    def login(self, email: str, password: str) -> Tuple[User, Session]:
+        """
+        Check email and password, then start a new session.
 
+        Args:
+            email (str): Email typed by the user.
+            password (str): Password typed by the user.
 
-def get_user_by_email(users: Dict[str, User], email: str) -> User:
-    """
-    Retrieve a user by their email address.
+        Returns:
+            Tuple[User, Session]: The user and their new session.
 
-    Args:
-        users (Dict[str, User]): User store keyed by email.
-        email (str): Target email address.
+        Raises:
+            InvalidCredentialsError: If the email or password is wrong.
+        """
+        user = self.users.get(normalize_email(email))
+        # Same message for unknown email and wrong password, so an
+        # attacker cannot find out which emails have accounts.
+        if user is None or not verify_password(
+            password or "", user.salt, user.password_hash
+        ):
+            raise InvalidCredentialsError("Incorrect email or password.")
 
-    Returns:
-        User: Matching user record.
+        session = Session(
+            token=secrets.token_urlsafe(32),
+            user_id=user.user_id,
+            expires_at=utc_now() + timedelta(hours=SESSION_HOURS),
+        )
+        self.sessions[session.token] = session
+        if self.conn is not None:
+            self._db().save_session(self.conn, session)
+        return user, session
 
-    Raises:
-        UserNotFoundError: If no account exists with this email.
-    """
-    clean_email = validate_email(email)
-    if clean_email not in users:
-        raise UserNotFoundError("User account not found.")
-    return users[clean_email]
+    def check_token(self, token: str) -> User:
+        """
+        Return the user who owns a valid session token.
 
+        Args:
+            token (str): Token from the Authorization header.
 
-def authenticate(
-    users: Dict[str, User],
-    sessions: Dict[str, Session],
-    email: str,
-    password: str,
-    ttl_hours: int = DEFAULT_SESSION_TTL_HOURS,
-) -> tuple[User, Session]:
-    """
-    Authenticate email & password and issue an active session token.
+        Returns:
+            User: The logged-in user.
 
-    Args:
-        users (Dict[str, User]): User data store.
-        sessions (Dict[str, Session]): Active sessions keyed by token.
-        email (str): Candidate email address.
-        password (str): Candidate plaintext password.
-        ttl_hours (int): Number of hours the session remains valid.
+        Raises:
+            InvalidSessionError: If the token is missing, unknown, or expired.
+        """
+        session = self.sessions.get(token or "")
+        if session is None:
+            raise InvalidSessionError("Please log in first.")
+        if utc_now() > session.expires_at:
+            self.logout(token)
+            raise InvalidSessionError("Session has expired.")
 
-    Returns:
-        tuple[User, Session]: Authenticated user and new session.
+        for user in self.users.values():
+            if user.user_id == session.user_id:
+                return user
+        raise InvalidSessionError("Session user not found.")
 
-    Raises:
-        InvalidCredentialsError: If credentials do not match or are empty.
-    """
-    if not isinstance(email, str) or not email.strip():
-        raise InvalidCredentialsError("Email and password are required.")
-    if not isinstance(password, str) or not password:
-        raise InvalidCredentialsError("Email and password are required.")
+    def logout(self, token: str) -> None:
+        """
+        End a session. Unknown tokens are ignored.
 
-    clean_email = validate_email(email)
-    user = users.get(clean_email)
-    if not user:
-        raise InvalidCredentialsError("Incorrect email or password.")
+        Args:
+            token (str): Token to remove.
+        """
+        self.sessions.pop(token, None)
+        if self.conn is not None:
+            self._db().delete_session(self.conn, token)
 
-    if not verify_password(password, user.salt, user.password_hash):
-        raise InvalidCredentialsError("Incorrect email or password.")
+    @staticmethod
+    def _db() -> ModuleType:
+        """
+        Import the database module only when it is needed.
 
-    token = secrets.token_urlsafe(32)
-    expires_at = datetime.utcnow() + timedelta(hours=ttl_hours)
-    session = Session(
-        token=token,
-        user_id=user.user_id,
-        expires_at=expires_at,
-    )
-    sessions[token] = session
-    return user, session
+        database.py imports this file, so importing it at the top here
+        would be a circular import.
 
-
-def validate_session(
-    users: Dict[str, User],
-    sessions: Dict[str, Session],
-    token: str,
-) -> User:
-    """
-    Validate a session token and return the associated user profile.
-
-    Args:
-        users (Dict[str, User]): User data store.
-        sessions (Dict[str, Session]): Active session store.
-        token (str): Bearer session token.
-
-    Returns:
-        User: Currently authenticated user.
-
-    Raises:
-        InvalidSessionError: If token is missing, expired, or invalid.
-    """
-    if not isinstance(token, str) or not token.strip():
-        raise InvalidSessionError("Authentication token is required.")
-
-    session = sessions.get(token.strip())
-    if not session:
-        raise InvalidSessionError("Invalid or expired session.")
-
-    if datetime.utcnow() > session.expires_at:
-        del sessions[token.strip()]
-        raise InvalidSessionError("Session has expired.")
-
-    # Find user by user_id
-    for user in users.values():
-        if user.user_id == session.user_id:
-            return user
-
-    raise InvalidSessionError("Session user not found.")
-
-
-def terminate_session(sessions: Dict[str, Session], token: str) -> None:
-    """
-    Log out a user by invalidating their active session token.
-
-    Args:
-        sessions (Dict[str, Session]): Active session store.
-        token (str): Token to revoke.
-
-    Returns:
-        None
-    """
-    if token in sessions:
-        del sessions[token]
-
-
-def seed_default_users(users: Dict[str, User]) -> Dict[str, User]:
-    """
-    Seed standard CMKL staff and professor test accounts.
-
-    Includes accounts defined in Vibranium Functional Test Plan:
-    - staff1@cmkl.ac.th (Staff, Password: Test@1234)
-    - prof1@cmkl.ac.th  (Professor, Password: Test@1234)
-
-    Args:
-        users (Dict[str, User]): Destination user store.
-
-    Returns:
-        Dict[str, User]: Seeded user store.
-    """
-    test_accounts = [
-        ("staff1@cmkl.ac.th", "Test@1234", ROLE_STAFF, "CMKL Staff Member"),
-        ("prof1@cmkl.ac.th", "Test@1234", ROLE_PROFESSOR, "CMKL Professor"),
-    ]
-    for email, pwd, role, name in test_accounts:
-        if email not in users:
-            register_user(users, email, pwd, role, name)
-    return users
+        Returns:
+            ModuleType: The database module.
+        """
+        import database
+        return database
