@@ -1,0 +1,14 @@
+/* file: index.css */
+/* purpose: Global stylesheet — Tailwind v4 entry point */
+/* author: Zin Zin Zaw Win */
+/* date: 2026-10-16 */
+
+@import "tailwindcss";
+
+/*
+  Configure class-based dark mode for Tailwind v4.
+  By default, Tailwind v4 uses the prefers-color-scheme media query.
+  This line tells it to apply dark: variants whenever a .dark class
+  is present on any ancestor element instead.
+*/
+@custom-variant dark (&:where(.dark, .dark *));

@@ -29,6 +29,12 @@ Lectures/
 Labs/
 *.pdf
 
+# Node & Frontend Build
+node_modules/
+dist/
+.vite/
+
 # Operating System files
 .DS_Store
 Thumbs.db
+
