@@ -2,6 +2,7 @@
 # purpose: Create, edit, and delete rooms and filter available rooms
 # author: Su Pyae Pyae Aung (Micky)
 # date: 2026-10-06
+"""Create, edit, and delete rooms and filter available rooms."""
 
 from dataclasses import dataclass, field
 from datetime import date

@@ -2,6 +2,7 @@
 # purpose: Unit tests for auth_service.py (OBJ-01 authentication cases)
 # author: Thiri Htet Thwe (Thiri)
 # date: 2026-10-20
+"""Unit tests for user authentication, password hashing, and session management."""
 
 from datetime import timedelta
 import unittest

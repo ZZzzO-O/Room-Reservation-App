@@ -2,7 +2,9 @@
 # purpose: Quick demonstration of RoomService features and CMKL seed data
 # author: Su Pyae Pyae Aung (Micky)
 # date: 2026-10-20
+"""Quick demonstration of RoomService features and CMKL seed data."""
 
+# pylint: disable=wrong-import-position
 from datetime import date
 from pathlib import Path
 import sys

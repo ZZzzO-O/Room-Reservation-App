@@ -2,6 +2,9 @@
 # purpose: SQLite persistence layer for Room Data, User Data, and sessions
 # author: Thiri Htet Thwe (Thiri)
 # date: 2026-10-20
+"""SQLite persistence layer for Room Data, User Data, sessions, and reservations."""
+
+# pylint: disable=wrong-import-position,wrong-import-order
 
 from datetime import date, datetime, time
 import json

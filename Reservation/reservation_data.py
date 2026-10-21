@@ -41,6 +41,7 @@ class Repetition(Enum):
     WEEKLY = "Weekly"
 
 
+# pylint: disable=too-many-instance-attributes
 @dataclass
 class Reservation:
     """

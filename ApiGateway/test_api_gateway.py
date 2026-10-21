@@ -2,6 +2,9 @@
 # purpose: End-to-end integration tests for API Gateway and Network Service
 # author: Thiri Htet Thwe (Thiri)
 # date: 2026-10-20
+"""Integration and unit tests for Flask REST API Gateway and microservice endpoints."""
+
+# pylint: disable=wrong-import-position
 
 import os
 from pathlib import Path
