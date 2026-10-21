@@ -9,6 +9,11 @@ from dataclasses import replace
 from datetime import date, time, timedelta
 from typing import List, Optional, Protocol
 
+# Q7: we import the same 5 names twice, once as a
+# package and once as a plain module. Works, but it's two lists to keep
+# in sync.
+# Fix idea: as a team, pick ONE way to run things (the gateway already
+# puts Reservation/ on sys.path), then keep just one import block.
 try:
     from .reservation_data import (
         Repetition,
@@ -29,6 +34,14 @@ except ImportError:
 
 ID_LENGTH = 8
 
+# Plain-text schedule report layout (characters)
+REPORT_WIDTH = 79
+DAY_WIDTH = 10
+TIME_WIDTH = 15
+ROOM_WIDTH = 10
+COMPETENCY_WIDTH = 18
+STUDENTS_WIDTH = 10
+
 
 class InvalidReservationError(ReservationError):
     """Raised when reservation fields are missing or inconsistent."""
@@ -42,6 +55,10 @@ class CapacityExceededError(ReservationError):
     """Raised when group size exceeds the room capacity."""
 
 
+# Q8: flake8-bugbear flags this (B042): super() only gets
+# `message`, so copy/pickle can't rebuild the error. Heads-up: the obvious
+# fix super().__init__(message, conflicting_reservation) makes str(err) a
+# tuple and breaks the gateway's error text. Fine to leave + note why.
 class ReservationConflictError(ReservationError):
     """Raised when a candidate overlaps an existing reservation."""
 
@@ -57,6 +74,23 @@ class ReservationConflictError(ReservationError):
         """
         super().__init__(message)
         self.conflicting_reservation = conflicting_reservation
+
+
+def _reservation_not_found(
+    reservation_id: Optional[str],
+) -> ReservationNotFoundError:
+    """
+    Build the error used whenever a reservation ID is not stored.
+
+    Args:
+        reservation_id (Optional[str]): The ID that was looked up.
+
+    Returns:
+        ReservationNotFoundError: Error ready to be raised.
+    """
+    return ReservationNotFoundError(
+        f"Reservation with ID '{reservation_id}' not found."
+    )
 
 
 class RoomCapacityProvider(Protocol):  # pylint: disable=too-few-public-methods
@@ -125,6 +159,9 @@ def has_date_overlap(
     return first_start <= second_end and second_start <= first_end
 
 
+# GOOOD: really neat. Same weekday + overlapping date ranges means they
+# DO share a real meeting date (the later start date is one), so no need to
+# loop over every week. We checked it, the comment is right.
 def is_conflicting(first: Reservation, second: Reservation) -> bool:
     """
     Check whether two reservations ever need the same room at once.
@@ -173,6 +210,8 @@ class ReservationService:
         self._repository = repository
         self._room_service = room_service
 
+# GOOOD: clean split. _validate_fields() needs nothing else, then room
+# checks, then conflicts. create and edit share the same checks.
     def create_reservation(self, reservation: Reservation) -> Reservation:
         """
         Validate a new reservation, give it an ID, and store it.
@@ -217,9 +256,7 @@ class ReservationService:
             reservation_id is None
             or self._repository.get_by_id(reservation_id) is None
         ):
-            raise ReservationNotFoundError(
-                f"Reservation with ID '{reservation_id}' not found."
-            )
+            raise _reservation_not_found(reservation_id)
         self._validate_reservation(reservation)
         return self._repository.update_reservation(reservation)
 
@@ -234,9 +271,7 @@ class ReservationService:
             ReservationNotFoundError: If the ID is not stored.
         """
         if not self._repository.delete_reservation(reservation_id):
-            raise ReservationNotFoundError(
-                f"Reservation with ID '{reservation_id}' not found."
-            )
+            raise _reservation_not_found(reservation_id)
 
     def get_reservation(self, reservation_id: str) -> Reservation:
         """
@@ -253,9 +288,7 @@ class ReservationService:
         """
         reservation = self._repository.get_by_id(reservation_id)
         if reservation is None:
-            raise ReservationNotFoundError(
-                f"Reservation with ID '{reservation_id}' not found."
-            )
+            raise _reservation_not_found(reservation_id)
         return reservation
 
     def search_by_competency(self, text: str) -> List[Reservation]:
@@ -292,7 +325,6 @@ class ReservationService:
         Returns:
             List[Reservation]: Active reservations sorted by day and time.
         """
-        week_end = week_start + timedelta(days=6)
         candidates = (
             self._repository.get_by_room(room_id)
             if room_id
@@ -300,9 +332,11 @@ class ReservationService:
         )
         matched = []
         for res in candidates:
-            if has_date_overlap(
-                res.start_date, res.last_date, week_start, week_end
-            ):
+            # A reservation meets at most once a week, so find that date
+            # and keep the reservation only if it falls inside its range
+            offset = (res.start_date.weekday() - week_start.weekday()) % 7
+            meeting_day = week_start + timedelta(days=offset)
+            if res.start_date <= meeting_day <= res.last_date:
                 matched.append(res)
 
         # Sort by weekday, start_time, room_id
@@ -329,15 +363,16 @@ class ReservationService:
         room_label = f"Room: {room_id}" if room_id else "All Rooms"
 
         lines = [
-            "=" * 79,
+            "=" * REPORT_WIDTH,
             "CMKL CLASSROOM RESERVATION SCHEDULE",
             f"Week: {week_start.isoformat()} to {week_end.isoformat()} "
             f"({room_label})",
             f"Total Bookings: {len(schedule)}",
-            "=" * 79,
-            f"{'Day':<10} {'Time':<15} {'Room':<10} {'Competency':<18} "
-            f"{'Students':<10} {'Repetition'}",
-            "-" * 79,
+            "=" * REPORT_WIDTH,
+            f"{'Day':<{DAY_WIDTH}} {'Time':<{TIME_WIDTH}} "
+            f"{'Room':<{ROOM_WIDTH}} {'Competency':<{COMPETENCY_WIDTH}} "
+            f"{'Students':<{STUDENTS_WIDTH}} {'Repetition'}",
+            "-" * REPORT_WIDTH,
         ]
 
         if not schedule:
@@ -345,13 +380,16 @@ class ReservationService:
         else:
             for r in schedule:
                 t_str = f"{r.start_time:%H:%M} - {r.end_time:%H:%M}"
+                name = r.competency[:COMPETENCY_WIDTH]
                 lines.append(
-                    f"{r.day_of_week.value:<10} {t_str:<15} {r.room_id:<10} "
-                    f"{r.competency:<18} {r.group_size:<10} "
+                    f"{r.day_of_week.value:<{DAY_WIDTH}} "
+                    f"{t_str:<{TIME_WIDTH}} {r.room_id:<{ROOM_WIDTH}} "
+                    f"{name:<{COMPETENCY_WIDTH}} "
+                    f"{r.group_size:<{STUDENTS_WIDTH}} "
                     f"{r.repetition.value}"
                 )
 
-        lines.append("=" * 79)
+        lines.append("=" * REPORT_WIDTH)
         return "\n".join(lines)
 
     def _generate_reservation_id(self) -> str:
@@ -379,6 +417,19 @@ class ReservationService:
             CapacityExceededError: If the group does not fit.
             ReservationConflictError: If the room is already booked.
         """
+# Q1: we check fields, capacity and clashes, but NEVER
+# whether the room is closed (renovation etc.). That's a Must Have, and
+# test plan 5.8 expects a rejection.
+# Fix idea: add is_room_available(room_id, start, end) to
+# RoomCapacityProvider (the room
+# service already has is_room_available()), call it here with
+# reservation.start_date and reservation.last_date, and raise a new
+# RoomUnavailableError. Needs Micky (room side) + Thiri (gateway adapter,
+# plus map the new error to an HTTP status).
+#
+# Q4: nothing stops a booking in 2030, or last year.
+# Test plan 5.11 expects "outside the semester" to be rejected.
+# Decide: add SEMESTER_START / SEMESTER_END and check here, or drop that test.
         self._validate_fields(reservation)
 
         room_capacity = self._room_service.get_room_capacity(
@@ -449,3 +500,7 @@ class ReservationService:
                 raise InvalidReservationError(
                     "End date must not be before start date."
                 )
+        elif reservation.end_date not in (None, reservation.start_date):
+            raise InvalidReservationError(
+                "One-time reservations cannot have a different end date."
+            )
