@@ -1,6 +1,6 @@
 # file: test_database.py
 # purpose: Unit tests for SQLite database persistence layer
-# author: Su Pyae Pyae Aung (Micky) & Thiri Htet Thwe (Thiri)
+# author: Thiri Htet Thwe (Thiri)
 # date: 2026-10-20
 
 from datetime import date, datetime, time, timedelta

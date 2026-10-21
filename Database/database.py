@@ -1,6 +1,6 @@
 # file: database.py
 # purpose: SQLite persistence layer for Room Data, User Data, and sessions
-# author: Su Pyae Pyae Aung (Micky) & Thiri Htet Thwe (Thiri)
+# author: Thiri Htet Thwe (Thiri)
 # date: 2026-10-20
 
 from datetime import date, datetime, time
@@ -105,10 +105,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         """)
 
 
-# -------------------------------------------------------------
 # Room Persistence Functions
-# -------------------------------------------------------------
-
 def save_room(conn: sqlite3.Connection, room: Room) -> None:
     """
     Insert or update a room record in SQLite.
