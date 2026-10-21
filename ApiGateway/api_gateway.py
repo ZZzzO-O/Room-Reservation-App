@@ -3,6 +3,12 @@
 #          login token with the Auth Service, and route to the right service
 # author: Thiri Htet Thwe (Thiri)
 # date: 2026-10-20
+"""
+API Gateway and Network Service.
+
+Receives HTTP requests, authenticates user tokens with AuthService,
+and routes to RoomService, ReservationService, and SQLite Database.
+"""
 
 from dataclasses import dataclass
 from datetime import date, time
@@ -20,6 +26,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 for folder in ("RoomService", "AuthService", "Reservation", "Database"):
     sys.path.insert(0, str(BASE_DIR / folder))
 
+# pylint: disable=wrong-import-position,wrong-import-order
 import auth_service as auth  # noqa: E402
 import database as db  # noqa: E402
 import reservation_data as rdata  # noqa: E402
@@ -27,6 +34,7 @@ import reservation_service as rservice  # noqa: E402
 import room_service as rs  # noqa: E402
 from seed_rooms import load_cmkl_rooms  # noqa: E402
 from seed_users import load_test_users  # noqa: E402
+# pylint: enable=wrong-import-position,wrong-import-order
 
 EQUIPMENT_KEYS = ("projector", "mic", "whiteboard", "tv_screen")
 
@@ -60,7 +68,7 @@ class AppState:
     conn: sqlite3.Connection
 
 
-class RoomCapacityLookup:
+class RoomCapacityLookup:  # pylint: disable=too-few-public-methods
     """Lets the Reservation Service ask for a room's capacity."""
 
     def __init__(self, rooms: Dict[str, rs.Room]) -> None:

@@ -2,6 +2,8 @@
 # purpose: Create, edit, and delete rooms and filter available rooms
 # author: Su Pyae Pyae Aung (Micky)
 # date: 2026-10-06
+"""Room Service business logic for managing classrooms and availability."""
+
 
 from dataclasses import dataclass, field
 from datetime import date

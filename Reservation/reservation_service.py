@@ -59,7 +59,7 @@ class ReservationConflictError(ReservationError):
         self.conflicting_reservation = conflicting_reservation
 
 
-class RoomCapacityProvider(Protocol):
+class RoomCapacityProvider(Protocol):  # pylint: disable=too-few-public-methods
     """Interface the room service must offer to this service."""
 
     def get_room_capacity(self, room_id: str) -> Optional[int]:

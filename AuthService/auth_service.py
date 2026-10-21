@@ -2,6 +2,10 @@
 # purpose: User authentication, session management, and role authorization
 # author: Thiri Htet Thwe (Thiri)
 # date: 2026-10-20
+"""
+User authentication, session tokens, and role-based authorization service.
+"""
+
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -45,16 +49,6 @@ class User:
     name: str = ""
 
 
-@dataclass(slots=True)
-class Session:
-    """A logged-in session, identified by a random token."""
-
-    token: str
-    user_id: str
-    expires_at: datetime
-    created_at: datetime = field(default_factory=lambda: utc_now())
-
-
 def utc_now() -> datetime:
     """
     Return the current UTC time without a time zone attached.
@@ -63,6 +57,16 @@ def utc_now() -> datetime:
         datetime: Current UTC time (naive, to match stored sessions).
     """
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+@dataclass(slots=True)
+class Session:
+    """A logged-in session, identified by a random token."""
+
+    token: str
+    user_id: str
+    expires_at: datetime
+    created_at: datetime = field(default_factory=utc_now)
 
 
 def hash_password(
@@ -258,5 +262,6 @@ class AuthService:
         Returns:
             ModuleType: The database module.
         """
+        # pylint: disable=import-outside-toplevel
         import database
         return database

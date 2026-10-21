@@ -2,6 +2,9 @@
 # purpose: Unit tests for SQLite database persistence layer
 # author: Thiri Htet Thwe (Thiri)
 # date: 2026-10-20
+"""
+Unit test suite verifying SQLite database persistence and schema operations.
+"""
 
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -14,11 +17,13 @@ sys.path.insert(0, str(BASE_DIR / "AuthService"))
 sys.path.insert(0, str(BASE_DIR / "Reservation"))
 sys.path.insert(0, str(BASE_DIR / "Database"))
 
+# pylint: disable=wrong-import-position,wrong-import-order
 import auth_service as auth  # noqa: E402
 from auth_service import Session, User  # noqa: E402
 import database as db  # noqa: E402
 from reservation_data import Repetition, Reservation  # noqa: E402
 from room_service import Room, UnavailablePeriod  # noqa: E402
+# pylint: enable=wrong-import-position,wrong-import-order
 
 
 class DatabaseTestCase(unittest.TestCase):

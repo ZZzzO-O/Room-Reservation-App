@@ -3,6 +3,7 @@
 # author: Thiri Htet Thwe (Thiri)
 # Owner: Micky (rooms), Thiri (users, sessions), Jan (reservations)
 # date: 2026-10-20
+"""SQLite permanent persistence layer for rooms, users, and reservations."""
 
 from datetime import date, datetime, time
 import json
@@ -16,9 +17,11 @@ sys.path.insert(0, str(BASE_DIR / "RoomService"))
 sys.path.insert(0, str(BASE_DIR / "AuthService"))
 sys.path.insert(0, str(BASE_DIR / "Reservation"))
 
+# pylint: disable=wrong-import-position
 from auth_service import Session, User  # noqa: E402
 from reservation_data import Repetition, Reservation  # noqa: E402
 from room_service import Room, UnavailablePeriod  # noqa: E402
+# pylint: enable=wrong-import-position
 
 DEFAULT_DB_FILE = "app.db"
 

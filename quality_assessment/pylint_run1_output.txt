@@ -1,0 +1,53 @@
+﻿************* Module Database
+Database\__init__.py:1:0: F0010: error while code parsing: Unable to load file Database\__init__.py:
+[Errno 2] No such file or directory: 'Database\\__init__.py' (parse-error)
+************* Module demo
+RoomService\demo.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+RoomService\demo.py:13:0: C0413: Import "import room_service as rs" should be placed at the top of the module (wrong-import-position)
+RoomService\demo.py:14:0: C0413: Import "from seed_rooms import load_cmkl_rooms" should be placed at the top of the module (wrong-import-position)
+************* Module room_service
+RoomService\room_service.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+************* Module seed_rooms
+RoomService\seed_rooms.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+************* Module test_room_service
+RoomService\test_room_service.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+RoomService\test_room_service.py:378:8: C0415: Import outside toplevel (seed_rooms.load_cmkl_rooms) (import-outside-toplevel)
+************* Module auth_service
+AuthService\auth_service.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+AuthService\auth_service.py:55:49: W0108: Lambda may not be necessary (unnecessary-lambda)
+AuthService\auth_service.py:261:8: C0415: Import outside toplevel (database) (import-outside-toplevel)
+************* Module seed_users
+AuthService\seed_users.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+************* Module test_auth_service
+AuthService\test_auth_service.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+************* Module api_gateway
+ApiGateway\api_gateway.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+ApiGateway\api_gateway.py:23:0: C0413: Import "import auth_service as auth" should be placed at the top of the module (wrong-import-position)
+ApiGateway\api_gateway.py:24:0: C0413: Import "import database as db" should be placed at the top of the module (wrong-import-position)
+ApiGateway\api_gateway.py:25:0: C0413: Import "import reservation_data as rdata" should be placed at the top of the module (wrong-import-position)
+ApiGateway\api_gateway.py:26:0: C0413: Import "import reservation_service as rservice" should be placed at the top of the module (wrong-import-position)
+ApiGateway\api_gateway.py:27:0: C0413: Import "import room_service as rs" should be placed at the top of the module (wrong-import-position)
+ApiGateway\api_gateway.py:28:0: C0413: Import "from seed_rooms import load_cmkl_rooms" should be placed at the top of the module (wrong-import-position)
+ApiGateway\api_gateway.py:29:0: C0413: Import "from seed_users import load_test_users" should be placed at the top of the module (wrong-import-position)
+ApiGateway\api_gateway.py:63:0: R0903: Too few public methods (1/2) (too-few-public-methods)
+ApiGateway\api_gateway.py:25:0: C0411: third party import "reservation_data" should be placed before first party import "database"  (wrong-import-order)
+ApiGateway\api_gateway.py:26:0: C0411: third party import "reservation_service" should be placed before first party import "database"  (wrong-import-order)
+ApiGateway\api_gateway.py:27:0: C0411: third party import "room_service" should be placed before first party import "database"  (wrong-import-order)
+ApiGateway\api_gateway.py:28:0: C0411: third party import "seed_rooms.load_cmkl_rooms" should be placed before first party import "database"  (wrong-import-order)
+ApiGateway\api_gateway.py:29:0: C0411: third party import "seed_users.load_test_users" should be placed before first party import "database"  (wrong-import-order)
+************* Module test_api_gateway
+ApiGateway\test_api_gateway.py:1:0: C0114: Missing module docstring (missing-module-docstring)
+ApiGateway\test_api_gateway.py:15:0: C0413: Import "from api_gateway import create_app" should be placed at the top of the module (wrong-import-position)
+************* Module Reservation
+Reservation\__init__.py:1:0: C0103: Module name "Reservation" doesn't conform to snake_case naming style (invalid-name)
+************* Module Reservation.reservation_data
+Reservation\reservation_data.py:45:0: R0902: Too many instance attributes (9/7) (too-many-instance-attributes)
+************* Module Reservation.reservation_service
+Reservation\reservation_service.py:62:0: R0903: Too few public methods (1/2) (too-few-public-methods)
+************* Module Reservation.test_reservation_service
+Reservation\test_reservation_service.py:53:0: R0903: Too few public methods (1/2) (too-few-public-methods)
+Reservation\test_reservation_service.py:128:0: R0904: Too many public methods (23/20) (too-many-public-methods)
+
+------------------------------------------------------------------
+Your code has been rated at 0.00/10 (previous run: 0.00/10, +0.00)
+

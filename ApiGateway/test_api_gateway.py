@@ -2,6 +2,7 @@
 # purpose: End-to-end integration tests for API Gateway and Network Service
 # author: Thiri Htet Thwe (Thiri)
 # date: 2026-10-20
+"""Integration and end-to-end tests for API Gateway and service routing."""
 
 import os
 from pathlib import Path
@@ -12,7 +13,9 @@ import unittest
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR / "ApiGateway"))
 
+# pylint: disable=wrong-import-position
 from api_gateway import create_app  # noqa: E402
+# pylint: enable=wrong-import-position
 
 STAFF = ("staff1@cmkl.ac.th", "Test@1234")
 PROFESSOR = ("prof1@cmkl.ac.th", "Test@1234")

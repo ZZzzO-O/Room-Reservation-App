@@ -2,6 +2,7 @@
 # purpose: Quick demonstration of RoomService features and CMKL seed data
 # author: Su Pyae Pyae Aung (Micky)
 # date: 2026-10-20
+"""Quick demonstration of RoomService features and CMKL seed data."""
 
 from datetime import date
 from pathlib import Path
@@ -10,8 +11,10 @@ import sys
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
+# pylint: disable=wrong-import-position
 import room_service as rs  # noqa: E402
 from seed_rooms import load_cmkl_rooms  # noqa: E402
+# pylint: enable=wrong-import-position
 
 
 def main() -> None:

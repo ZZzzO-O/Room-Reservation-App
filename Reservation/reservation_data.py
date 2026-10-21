@@ -42,7 +42,7 @@ class Repetition(Enum):
 
 
 @dataclass
-class Reservation:
+class Reservation:  # pylint: disable=too-many-instance-attributes
     """
     A room reservation for one competency meeting.
 
