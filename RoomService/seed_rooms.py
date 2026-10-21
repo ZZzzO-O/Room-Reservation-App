@@ -2,7 +2,6 @@
 # purpose: Pre-populate official CMKL University classroom data
 # author: Su Pyae Pyae Aung (Micky)
 # date: 2026-10-20
-"""Pre-populate official CMKL University classroom data."""
 
 from typing import Dict
 

@@ -3,9 +3,6 @@
 #          login token with the Auth Service, and route to the right service
 # author: Thiri Htet Thwe (Thiri)
 # date: 2026-10-20
-"""REST API Gateway and Network Service routing for the web application."""
-
-# pylint: disable=wrong-import-position,wrong-import-order
 
 from dataclasses import dataclass
 from datetime import date, time
@@ -63,7 +60,6 @@ class AppState:
     conn: sqlite3.Connection
 
 
-# pylint: disable=too-few-public-methods
 class RoomCapacityLookup:
     """Lets the Reservation Service ask for a room's capacity."""
 

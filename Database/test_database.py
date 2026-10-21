@@ -2,9 +2,6 @@
 # purpose: Unit tests for SQLite database persistence layer
 # author: Thiri Htet Thwe (Thiri)
 # date: 2026-10-20
-"""Unit tests verifying SQLite database operations and data persistence."""
-
-# pylint: disable=wrong-import-position,wrong-import-order
 
 from datetime import date, datetime, time, timedelta
 from pathlib import Path

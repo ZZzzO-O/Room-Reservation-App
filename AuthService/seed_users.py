@@ -2,7 +2,6 @@
 # purpose: Sample Staff and Professor accounts for development and testing
 # author: Thiri Htet Thwe (Thiri)
 # date: 2026-10-21
-"""Sample Staff and Professor test accounts for development and testing."""
 
 from auth_service import ROLE_PROFESSOR, ROLE_STAFF, AuthService
 

@@ -50,7 +50,6 @@ TUESDAY = date(2026, 11, 3)
 SEMESTER_END = date(2026, 12, 14)
 
 
-# pylint: disable=too-few-public-methods
 class FakeRoomService:
     """Stand-in for the room service."""
 
@@ -126,7 +125,6 @@ def make_once(start_date: date, start_hour: int = 10) -> Reservation:
     )
 
 
-# pylint: disable=too-many-public-methods
 class ReservationServiceTest(unittest.TestCase):
     """Tests for ReservationService."""
 

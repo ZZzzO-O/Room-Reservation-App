@@ -2,13 +2,11 @@
 # purpose: Unit tests for room_service.py
 # author: Su Pyae Pyae Aung (Micky)
 # date: 2026-10-06
-"""Unit tests for room management, recommendation, and seed data."""
 
 from datetime import date
 import unittest
 
 import room_service as rs
-from seed_rooms import load_cmkl_rooms
 
 
 class RoomTestCase(unittest.TestCase):
@@ -377,6 +375,8 @@ class TestSeedRooms(RoomTestCase):
 
     def test_load_cmkl_rooms_populates_catalog(self) -> None:
         """Check: load cmkl rooms populates official rooms."""
+        from seed_rooms import load_cmkl_rooms
+
         load_cmkl_rooms(self.rooms)
         self.assertIn("601", self.rooms)
         self.assertEqual(self.rooms["601"].name, "Pioneer")
