@@ -40,8 +40,8 @@ export default function App() {
   const [rooms, setRooms] = useState([]);
   const [reservations, setReservations] = useState([]);
 
-  // Modals state
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  // Modals state: auto-prompt login if no active session
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(!getStoredUser());
   const [selectedRoomForBooking, setSelectedRoomForBooking] = useState(null);
 
   /**
