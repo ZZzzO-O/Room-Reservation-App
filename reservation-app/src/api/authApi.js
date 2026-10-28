@@ -102,9 +102,28 @@ export async function loginUser(email, password) {
       body: JSON.stringify({ email: trimmedEmail, password }),
     });
 
-    const data = await response.json();
+    // A stopped API gateway makes Vite return an empty proxy response. Read
+    // the body first so that case can use the offline test-account fallback
+    // instead of leaking a JSON parser error into the sign-in dialog.
+    const responseText = await response.text();
+    let data = {};
+    if (responseText) {
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        throw new Error('Authentication service is temporarily unavailable.');
+      }
+    }
+
     if (!response.ok) {
+      if (response.status >= 500) {
+        throw new Error('Authentication service is temporarily unavailable.');
+      }
       throw new Error(data.error || 'Authentication failed.');
+    }
+
+    if (!data.token || !data.user) {
+      throw new Error('Authentication service is temporarily unavailable.');
     }
 
     setStoredSession(data.token, data.user);
@@ -115,7 +134,12 @@ export async function loginUser(email, password) {
       (entry) => entry.email.toLowerCase() === trimmedEmail.toLowerCase()
     );
 
-    if (err.message && err.message !== 'Failed to fetch' && !err.message.includes('NetworkError')) {
+    const canUseOfflineFallback = [
+      'Failed to fetch',
+      'Authentication service is temporarily unavailable.',
+    ].includes(err.message) || err.message?.includes('NetworkError');
+
+    if (!canUseOfflineFallback) {
       throw err;
     }
 

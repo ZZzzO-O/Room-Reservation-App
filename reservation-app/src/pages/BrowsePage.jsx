@@ -15,6 +15,7 @@ import {
   FlaskConical,
   Briefcase,
   LayoutGrid,
+  X,
 } from 'lucide-react';
 
 import RoomCard from '../components/RoomCard';
@@ -196,15 +197,26 @@ export default function BrowsePage({
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-2">
           {/* Search bar prioritized for room numbers */}
           <div className="md:col-span-5 relative">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
             <input
               id="search-rooms"
               type="text"
               placeholder="Search room number (e.g. 604, 609, 601) or name..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full pl-10 pr-10 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-100 transition-colors"
+                aria-label="Clear room search"
+                title="Clear search"
+              >
+                <X className="w-4 h-4" aria-hidden="true" />
+              </button>
+            )}
           </div>
 
           {/* Typed Capacity Input */}

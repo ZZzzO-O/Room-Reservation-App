@@ -709,8 +709,10 @@ def load_data(conn: sqlite3.Connection) -> AppState:
         reservations.add_reservation(res)
 
     auth_service = auth.AuthService(conn)
-    if not auth_service.users:
-        load_test_users(auth_service)
+    # These are documented development/test-plan accounts. Refresh them even
+    # when the database already contains users so old local data cannot leave
+    # their advertised credentials unusable.
+    load_test_users(auth_service)
 
     return AppState(
         auth=auth_service,
