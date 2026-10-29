@@ -54,6 +54,7 @@ ERROR_STATUS = {
     rs.DuplicateRoomError: 409,
     rservice.InvalidReservationError: 400,
     rservice.CapacityExceededError: 400,
+    rservice.RoomUnavailableError: 409,
     rservice.RoomNotFoundError: 404,
     rdata.ReservationNotFoundError: 404,
 }
