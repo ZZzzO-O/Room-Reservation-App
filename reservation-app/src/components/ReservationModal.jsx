@@ -34,7 +34,10 @@ export default function ReservationModal({
   const [date, setDate] = useState(reservation ? reservation.start_date : '2026-10-12');
   const [startTime, setStartTime] = useState(reservation ? reservation.start_time : '10:00');
   const [endTime, setEndTime] = useState(reservation ? reservation.end_time : '12:00');
-  const [repetition, setRepetition] = useState(reservation?.repetition || 'Weekly');
+  const rawRep = reservation?.repetition;
+  const initialRepetition =
+    rawRep === 'Once' || rawRep === 'None' ? 'Once' : 'Weekly';
+  const [repetition, setRepetition] = useState(initialRepetition);
 
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -84,15 +87,16 @@ export default function ReservationModal({
 
     setIsLoading(true);
 
+    const isSingleSlot = repetition === 'Once' || repetition === 'None';
     const payload = {
       competency: competency.trim().toUpperCase(),
       room_id: selectedRoomId,
       group_size: groupNum,
       start_date: date,
-      end_date: SEMESTER_END,
+      end_date: isSingleSlot ? date : SEMESTER_END,
       start_time: startTime,
       end_time: endTime,
-      repetition,
+      repetition: isSingleSlot ? 'Once' : 'Weekly',
     };
 
     try {
@@ -235,12 +239,12 @@ export default function ReservationModal({
                 </label>
                 <select
                   id="reservation-repetition"
-                  value={repetition}
+                  value={repetition === 'None' ? 'Once' : repetition}
                   onChange={(e) => setRepetition(e.target.value)}
                   className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                 >
                   <option value="Weekly">Weekly (Semester)</option>
-                  <option value="None">Single Slot</option>
+                  <option value="Once">Single Slot</option>
                 </select>
               </div>
             </div>

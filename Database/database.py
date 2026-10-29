@@ -457,6 +457,11 @@ def load_reservations(conn: sqlite3.Connection) -> Dict[str, Reservation]:
         end_d = (
             date.fromisoformat(row["end_date"]) if row["end_date"] else None
         )
+        rep_val = row["repetition"]
+        if rep_val in ("None", "none", "Single Slot"):
+            rep_enum = Repetition.ONCE
+        else:
+            rep_enum = Repetition(rep_val)
         res = Reservation(
             reservation_id=row["reservation_id"],
             competency=row["competency"],
@@ -466,7 +471,7 @@ def load_reservations(conn: sqlite3.Connection) -> Dict[str, Reservation]:
             end_date=end_d,
             start_time=time.fromisoformat(row["start_time"]),
             end_time=time.fromisoformat(row["end_time"]),
-            repetition=Repetition(row["repetition"]),
+            repetition=rep_enum,
         )
         reservations[res.reservation_id] = res
     return reservations

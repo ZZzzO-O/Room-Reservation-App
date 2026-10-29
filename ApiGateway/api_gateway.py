@@ -320,6 +320,34 @@ def search_args() -> Tuple[int, date, date, Dict[str, int]]:
     )
 
 
+def to_repetition(val: Any) -> rdata.Repetition:
+    """
+    Convert repetition text to a Repetition enum.
+
+    Args:
+        val (Any): Text from request (e.g. 'Once', 'Weekly', 'None').
+
+    Returns:
+        rdata.Repetition: Parsed repetition.
+
+    Raises:
+        ValueError: If repetition text is invalid.
+    """
+    if isinstance(val, rdata.Repetition):
+        return val
+    text = str(val).strip().lower()
+    if text in ("once", "none", "single slot", "single", "one-time", "1"):
+        return rdata.Repetition.ONCE
+    if text in ("weekly", "week", "recurring"):
+        return rdata.Repetition.WEEKLY
+    try:
+        return rdata.Repetition(str(val).strip().capitalize())
+    except ValueError:
+        raise ValueError(
+            f"'{val}' is not a valid Repetition (use 'Once' or 'Weekly')."
+        ) from None
+
+
 def reservation_from_json(
     data: Dict[str, Any], old: Optional[rdata.Reservation] = None
 ) -> rdata.Reservation:
@@ -360,7 +388,7 @@ def reservation_from_json(
         end_date=read("end_date", to_date),
         start_time=read("start_time", to_time, required=True),
         end_time=read("end_time", to_time, required=True),
-        repetition=read("repetition", rdata.Repetition,
+        repetition=read("repetition", to_repetition,
                         rdata.Repetition.WEEKLY),
         reservation_id=old.reservation_id if old else None,
     )

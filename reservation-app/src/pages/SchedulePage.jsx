@@ -194,7 +194,7 @@ export default function SchedulePage({ reservations, rooms }) {
                           <span className="flex items-center gap-1">
                             <Users className="w-2.5 h-2.5" /> {res.group_size} seats
                           </span>
-                          <span>{res.repetition || 'Weekly'}</span>
+                          <span>{res.repetition === 'Once' ? 'Single Slot' : (res.repetition || 'Weekly')}</span>
                         </div>
                       </div>
                     );
