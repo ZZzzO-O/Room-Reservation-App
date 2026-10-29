@@ -191,6 +191,9 @@ export async function fetchCurrentUser() {
         setStoredSession(token, data.user);
         return data.user;
       }
+    } else if (response.status === 401) {
+      clearStoredSession();
+      return null;
     }
   } catch {
     // Return cached user if backend is momentarily unreachable
