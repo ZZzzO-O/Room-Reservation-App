@@ -142,7 +142,7 @@ export default function MyReservationsPage({
 
                     <div className="flex items-center gap-2 text-xs text-slate-400">
                       <Repeat className="w-3.5 h-3.5" />
-                      <span>{res.repetition || 'Weekly'}</span>
+                      <span>{res.repetition === 'Once' ? 'Single Slot' : (res.repetition || 'Weekly')}</span>
                     </div>
                   </div>
                 </div>
