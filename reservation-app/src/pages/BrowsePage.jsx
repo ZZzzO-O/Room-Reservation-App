@@ -26,7 +26,7 @@ import { deleteRoom } from '../api/roomApi';
 const CATEGORY_TABS = [
   { key: 'ALL', label: 'All Spaces', icon: LayoutGrid },
   { key: 'Classroom', label: 'Classrooms', icon: BookOpen },
-  { key: 'Student Lab', label: 'Student Lab (Voyager)', icon: FlaskConical },
+  { key: 'Lab', label: 'Lab', icon: FlaskConical },
   { key: 'Computer Lab', label: 'Computer Lab (Cube)', icon: Laptop },
   { key: 'Meeting Room', label: 'Meeting Rooms', icon: Briefcase },
 ];
@@ -155,7 +155,7 @@ export default function BrowsePage({
               CMKL Campus Spaces
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Official catalog of classrooms, student labs, and meeting facilities for Fall 2026.
+              Official catalog of classrooms, labs, and meeting facilities for Fall 2026.
             </p>
           </div>
 

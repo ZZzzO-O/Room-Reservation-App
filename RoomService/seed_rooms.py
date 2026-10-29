@@ -16,7 +16,7 @@ def load_cmkl_rooms(rooms: Dict[str, Room]) -> Dict[str, Room]:
 
     Classroom names match the CMKL campus building directory.
     Note: Room 706 (Apex Supercomputer) is excluded as it is a server
-    facility, not a student bookable classroom.
+    facility, not a bookable classroom.
 
     Args:
         rooms (Dict[str, Room]): Destination room dictionary.

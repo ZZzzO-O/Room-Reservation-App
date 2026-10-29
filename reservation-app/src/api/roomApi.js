@@ -28,10 +28,10 @@ export const OFFICIAL_SEED_ROOMS = [
   {
     room_id: '602',
     name: 'Voyager',
-    room_type: 'Student Lab',
+    room_type: 'Lab',
     capacity: 35,
     equipment: { whiteboard: 2 },
-    description: 'Student project & workspace lab',
+    description: 'Project & workspace lab',
     unavailable_periods: [],
   },
   {
@@ -40,7 +40,7 @@ export const OFFICIAL_SEED_ROOMS = [
     room_type: 'Computer Lab',
     capacity: 30,
     equipment: { computers: 30, projector: 1, whiteboard: 1 },
-    description: 'High-performance student computer lab',
+    description: 'High-performance computer lab',
     unavailable_periods: [],
   },
   {
@@ -104,7 +104,7 @@ export const OFFICIAL_SEED_ROOMS = [
  */
 const CMKL_ROOM_METADATA = {
   '601': { type: 'Classroom', desc: 'Lecture classroom' },
-  '602': { type: 'Student Lab', desc: 'Lab — where students work' },
+  '602': { type: 'Lab', desc: 'Project & workspace lab' },
   '603': { type: 'Computer Lab', desc: 'Computer Lab (30 PCs)' },
   '604': { type: 'Classroom', desc: 'Lecture classroom' },
   '605': { type: 'Classroom', desc: 'Lecture classroom' },
@@ -150,8 +150,22 @@ export function normalizeRoom(raw) {
   );
 
   const meta = CMKL_ROOM_METADATA[roomId] || {};
-  const roomType = raw.room_type || meta.type || 'Classroom';
-  const description = raw.description || meta.desc || '';
+  const rawRoomType = raw.room_type || meta.type || 'Classroom';
+  const roomType =
+    rawRoomType === 'Student Lab' || rawRoomType === 'Students Lab'
+      ? 'Lab'
+      : rawRoomType;
+  let description = raw.description || meta.desc || '';
+  if (
+    description.includes('where students work') ||
+    description.includes('Student project') ||
+    description.includes('student')
+  ) {
+    description = description
+      .replace(/where students work/gi, 'workspace lab')
+      .replace(/Student project & workspace lab/gi, 'Project & workspace lab')
+      .replace(/High-performance student computer lab/gi, 'High-performance computer lab');
+  }
 
   // Clean room name (e.g. "Pioneer" instead of "Pioneer (601)")
   let cleanName = raw.name || `Room ${roomId}`;

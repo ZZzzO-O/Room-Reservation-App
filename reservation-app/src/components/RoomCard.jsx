@@ -19,16 +19,16 @@ import {
 
 /**
  * Render category badge with appropriate icon and styling.
- * @param {string} roomType - Type of room ('Classroom' | 'Student Lab' | 'Computer Lab' | 'Meeting Room').
+ * @param {string} roomType - Type of room ('Classroom' | 'Lab' | 'Computer Lab' | 'Meeting Room').
  * @returns {JSX.Element} Category pill.
  */
 function renderTypeBadge(roomType) {
   switch (roomType) {
-    case 'Student Lab':
+    case 'Lab':
       return (
         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
           <FlaskConical className="w-3 h-3" />
-          Student Lab
+          Lab
         </span>
       );
     case 'Computer Lab':

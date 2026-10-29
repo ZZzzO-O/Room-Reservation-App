@@ -144,7 +144,7 @@ export default function RoomModal({ isOpen, room, onClose, onSuccess }) {
                 className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               >
                 <option value="Classroom">Classroom</option>
-                <option value="Student Lab">Student Lab (where students work)</option>
+                <option value="Lab">Lab</option>
                 <option value="Computer Lab">Computer Lab</option>
                 <option value="Meeting Room">Meeting Room</option>
               </select>
