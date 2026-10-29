@@ -4,9 +4,10 @@
 // date: 2026-10-20
 
 import React, { useState } from 'react';
-import { AlertTriangle, X, Trash2, CheckCircle2 } from 'lucide-react';
 
 import { deleteReservation } from '../api/reservationApi';
+import ModalShell from './ModalShell';
+import { BTN_SECONDARY, BTN_DANGER, ERROR_BOX } from '../utils/styles';
 
 /**
  * Confirmation dialog for cancelling a reservation, implementing Lab 4's Activity Diagram.
@@ -24,9 +25,6 @@ export default function DeleteConfirmModal({ isOpen, reservation, onClose, onSuc
 
   if (!isOpen || !reservation) return null;
 
-  /**
-   * Execute deletion upon user clicking confirm.
-   */
   const handleConfirm = async () => {
     setErrorMessage('');
     setIsDeleting(true);
@@ -48,95 +46,64 @@ export default function DeleteConfirmModal({ isOpen, reservation, onClose, onSuc
     }
   };
 
-  /**
-   * Explicit cancel action: keep reservation unchanged.
-   */
-  const handleCancel = () => {
-    onClose();
-  };
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-700">
-        {/* Header */}
-        <div className="bg-red-600 px-6 py-4 text-white flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5" />
-            <h2 className="text-lg font-bold">Delete Reservation</h2>
-          </div>
-          <button
-            onClick={handleCancel}
-            className="text-red-100 hover:text-white p-1 rounded-lg"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <ModalShell title="Delete reservation" onClose={onClose}>
+      <div className="p-5 space-y-4">
+        {isDeleted ? (
+          <p className="py-4 text-sm text-slate-700 dark:text-slate-200">
+            Deleted. The slot is free for other bookings.
+          </p>
+        ) : (
+          <>
+            {errorMessage ? (
+              <div className={ERROR_BOX}>{errorMessage}</div>
+            ) : (
+              <>
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  {reservation.repetition === 'Weekly'
+                    ? 'This removes every weekly slot in the series. It can’t be undone.'
+                    : 'This can’t be undone.'}
+                </p>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm tabular-nums border-y border-slate-200 dark:border-slate-700 py-3">
+                  <dt className="text-slate-500 dark:text-slate-400">Course</dt>
+                  <dd className="font-semibold text-slate-900 dark:text-white">{reservation.competency}</dd>
+                  <dt className="text-slate-500 dark:text-slate-400">Room</dt>
+                  <dd className="text-slate-900 dark:text-white">{reservation.room_id}</dd>
+                  <dt className="text-slate-500 dark:text-slate-400">When</dt>
+                  <dd className="text-slate-900 dark:text-white">
+                    {reservation.start_date}, {reservation.start_time}–{reservation.end_time}
+                  </dd>
+                  <dt className="text-slate-500 dark:text-slate-400">Group</dt>
+                  <dd className="text-slate-900 dark:text-white">{reservation.group_size} students</dd>
+                </dl>
+              </>
+            )}
 
-        {/* Body */}
-        <div className="p-6 space-y-4">
-          {isDeleted ? (
-            <div className="py-6 flex flex-col items-center justify-center text-center">
-              <CheckCircle2 className="w-12 h-12 text-green-500 mb-2" />
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                Reservation Deleted
-              </h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                The slot has been freed for other bookings.
-              </p>
-            </div>
-          ) : (
-            <>
-              {errorMessage ? (
-                <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800/60 text-red-700 dark:text-red-300 rounded-lg text-sm">
-                  {errorMessage}
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <p className="text-sm text-slate-600 dark:text-slate-300">
-                    Are you sure you want to permanently delete this classroom reservation?
-                  </p>
-
-                  <div className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 text-sm space-y-1">
-                    <p className="font-semibold text-slate-800 dark:text-slate-200">
-                      Competency: {reservation.competency}
-                    </p>
-                    <p className="text-slate-600 dark:text-slate-400">
-                      Room: {reservation.room_id} | Seats: {reservation.group_size}
-                    </p>
-                    <p className="text-slate-600 dark:text-slate-400">
-                      Date: {reservation.start_date} ({reservation.start_time} - {reservation.end_time})
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              <div className="pt-2 flex justify-end gap-3">
+            <div className="flex justify-end gap-2">
+              <button
+                id="delete-cancel-btn"
+                type="button"
+                onClick={onClose}
+                disabled={isDeleting}
+                className={BTN_SECONDARY}
+              >
+                {errorMessage ? 'Close' : 'Keep it'}
+              </button>
+              {!errorMessage && (
                 <button
-                  id="delete-cancel-btn"
+                  id="delete-confirm-btn"
                   type="button"
-                  onClick={handleCancel}
+                  onClick={handleConfirm}
                   disabled={isDeleting}
-                  className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                  className={BTN_DANGER}
                 >
-                  Cancel
+                  {isDeleting ? 'Deleting…' : 'Delete reservation'}
                 </button>
-                {!errorMessage && (
-                  <button
-                    id="delete-confirm-btn"
-                    type="button"
-                    onClick={handleConfirm}
-                    disabled={isDeleting}
-                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm disabled:opacity-60 flex items-center gap-1.5"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    {isDeleting ? 'Deleting...' : 'Confirm Delete'}
-                  </button>
-                )}
-              </div>
-            </>
-          )}
-        </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
-    </div>
+    </ModalShell>
   );
 }

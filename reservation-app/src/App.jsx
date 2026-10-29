@@ -44,9 +44,6 @@ export default function App() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(!getStoredUser());
   const [selectedRoomForBooking, setSelectedRoomForBooking] = useState(null);
 
-  /**
-   * Refetch rooms and reservations from API / storage.
-   */
   const reloadData = useCallback(async () => {
     try {
       const [fetchedRooms, fetchedReservations] = await Promise.all([
@@ -60,9 +57,6 @@ export default function App() {
     }
   }, []);
 
-  /**
-   * Initial data load on component mount.
-   */
   useEffect(() => {
     fetchCurrentUser().then((u) => {
       if (u) setCurrentUser(u);
@@ -70,23 +64,20 @@ export default function App() {
     reloadData();
   }, [reloadData]);
 
-  /** Toggle dark mode CSS class on root container. */
   const toggleDarkMode = () => setIsDarkMode((prev) => !prev);
 
-  /** Log out current user. */
   const handleLogout = async () => {
     await logoutUser();
     setCurrentUser(null);
   };
 
-  /** Reset everything back to the official test plan seed data. */
+  // Restores the local fallback store; the backend keeps its own data
   const handleResetSeedData = async () => {
     resetRoomsToSeed();
     resetReservationsToSeed();
     await reloadData();
   };
 
-  /** Open booking modal for a specific room. */
   const handleBookClick = (room) => {
     if (!room.isAvailable) return;
     setSelectedRoomForBooking(room);
@@ -133,7 +124,6 @@ export default function App() {
           )}
         </main>
 
-        {/* Global Modals */}
         <LoginModal
           isOpen={isLoginModalOpen}
           onClose={() => setIsLoginModalOpen(false)}

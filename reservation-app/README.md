@@ -1,53 +1,55 @@
-# Classroom Reservation Application
+# reservation-app
 
-## Project Overview
+React front end for the Classroom Reservation Application (SEN-201, Team Vibranium).
+Built with Vite, React 19 and Tailwind CSS v4.
 
-The Classroom Reservation Application is a modern React-based web solution developed for managing and booking academic spaces, lecture halls, and study pods efficiently. Built as part of University coursework and engineered under strict "Team Vibranium" coding standards, this application emphasizes modular frontend architecture, clean code readability, JSDoc documentation, and a seamless user experience complete with a responsive dark mode interface.
+## Running it
 
-## Architecture and Project Structure
+Start the API gateway first (from the repo root):
 
-The project follows a strict separation of concerns to maintain scalability and modularity. All application logic is neatly organized within the source directory using a predictable directory layout.
+```bash
+python ApiGateway/api_gateway.py      # serves the API on http://127.0.0.1:5000
+```
 
-The API layer resides in the `src/api` directory, housing service modules like `roomApi.js` which handle backend communication and mock data retrieval.
-
-The user interface elements and reusable UI blocks, such as the navigation bar and individual room display cards, are located within the `src/components` directory under files like `NavBar.jsx` and `RoomCard.jsx`.
-
-The primary views and dashboard containers are housed in the `src/pages` directory, featuring files like `HomePage.jsx` which manage state, coordinate components, and apply filtering logic.
-
-## Core Features
-
-The application features a fully interactive room browsing dashboard that retrieves available facilities dynamically through asynchronous service functions. Users can toggle between a clean light mode and a comfortable dark mode interface instantly, utilizing custom CSS styling classes configured globally. The application also implements strict JSDoc documentation across all components and helper functions to ensure high code maintainability and robust type hinting.
-
-## Prerequisites
-
-Before you begin, ensure you have Node.js and npm installed on your local machine. You can verify your installation by running `node -v` and `npm -v` in your terminal.
-
-## Installation and Setup
-
-To set up the project locally on your machine, follow these steps sequentially.
-
-First, clone the repository or open your existing project folder in your terminal and navigate into the application directory:
+Then start the dev server:
 
 ```bash
 cd reservation-app
-```
-
-Next, install all required dependencies:
-
-```bash
 npm install
+npm run dev                           # http://localhost:5173
 ```
 
-Finally, start the development server:
+`vite.config.js` proxies `/api/*` to port 5000, so the browser only talks to the dev server.
+If the backend isn't running, the API modules fall back to seed data kept in `localStorage`,
+so the UI still works for demos.
 
-```bash
-npm run dev
+Other scripts: `npm run lint`, `npm run build` (output in `dist/`, which `desktop_app.py` serves).
+
+## Test accounts
+
+| Email               | Password    | Role      |
+| ------------------- | ----------- | --------- |
+| `staff1@cmkl.ac.th` | `Test@1234` | Staff     |
+| `prof1@cmkl.ac.th`  | `Test@1234` | Professor |
+
+Staff can add, edit, close and delete rooms. Both roles can book.
+
+## Layout
+
+```
+src/
+  App.jsx              view switching, current user, rooms + reservations state
+  api/                 fetch wrappers for /api/auth, /api/rooms, /api/reservations
+                       (each has a localStorage fallback and the seed data)
+  components/
+    ModalShell.jsx     shared dialog frame: overlay, title, Escape to close
+    NavBar.jsx, RoomCard.jsx, *Modal.jsx
+  pages/               BrowsePage (rooms), MyReservationsPage, SchedulePage
+  utils/styles.js      shared class strings for inputs and buttons
+  index.css            Tailwind entry + brand colour and font tokens
 ```
 
-The application will be available at `http://localhost:5173` by default.
+## Styling
 
-## Built With
-
-- [React](https://react.dev/) — UI library
-- [Vite](https://vitejs.dev/) — Build tool and dev server
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) — React Fast Refresh via Babel
+All accent colours use the `brand-*` scale defined in `src/index.css`. Change it there to
+re-theme the app. See `DESIGN.md` in the repo root for the rules we follow.

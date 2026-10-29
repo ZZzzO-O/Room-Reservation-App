@@ -12,17 +12,20 @@
 
 ## Overview
 
-The **Classroom Reservation Application** streamlines semester classroom planning at CMKL University. It manages room capacities, specialized equipment attributes, closures/renovations, and conflict-free reservations for up to 50 competencies per semester.
+A room booking system for CMKL University. Staff maintain the list of rooms (capacity,
+equipment, closures for renovation); professors book rooms for their courses, up to 50
+course competencies per semester, and the system rejects double bookings and groups that
+don't fit.
 
-### Key Capabilities
-- **Authentication & RBAC**: Secure credential verification with role segregation (Staff vs Professor).
-- **Room Management**: Add, edit, and delete bookable rooms with capacity and equipment attributes.
-- **Availability & Closures**: Mark rooms unavailable during specific date ranges (e.g. renovations).
-- **Search & Filtering**: Filter rooms by group size, required equipment, and date ranges in optimal $O(n)$ time.
-- **Smart Recommendation**: Auto-recommend the smallest suitable room to optimize campus resource utilization.
-- **Reservation Engine**: Create, edit, and delete semester reservations with automatic conflict checks for overlapping times and room capacities.
-- **Schedule Views & Timetable Export**: View weekly schedules (handling parallel classes in different rooms) and export formatted schedule reports to text files.
-- **Permanent Persistence**: SQLite database (`app.db`) for retaining campus records across semesters / 4-year cycle.
+### What it does
+- **Sign-in with roles**: Staff and Professor accounts; only Staff can change rooms.
+- **Rooms**: add, edit and delete rooms with capacity and equipment counts.
+- **Closures**: close a room for a date range with a reason (e.g. renovation).
+- **Search**: filter rooms by group size, required equipment and dates.
+- **Recommendation**: suggests the smallest room that fits the group.
+- **Reservations**: create, edit and delete bookings; overlapping times and over-capacity groups are rejected.
+- **Weekly schedule**: timetable view (parallel classes in different rooms are fine) with a plain-text export.
+- **Storage**: SQLite (`app.db`), so data survives restarts.
 
 ---
 
@@ -48,7 +51,7 @@ The **Classroom Reservation Application** streamlines semester classroom plannin
 
 ---
 
-## Quick Start & Installation (< 3 Minutes)
+## Getting started
 
 ### Prerequisites
 - Python 3.10+
@@ -65,11 +68,14 @@ cd Room-Reservation-App
 pip install -r requirements.txt
 ```
 
-### 3. Start the API Gateway (Backend Server)
+### 3. Start the API gateway
 ```bash
 python ApiGateway/api_gateway.py
 ```
 Server runs at `http://127.0.0.1:5000` with CORS enabled for the React frontend.
+
+### 4. Start the web app
+See [reservation-app/README.md](reservation-app/README.md) (needs Node.js 20.19+ or 22.12+).
 
 ---
 
@@ -89,7 +95,7 @@ Server runs at `http://127.0.0.1:5000` with CORS enabled for the React frontend.
 - `POST   /api/rooms/<id>/unavailable` — Mark room closed with date range & reason (Staff only)
 - `GET    /api/rooms/available` — Filter available rooms by group size, equipment & dates
 - `GET    /api/rooms/recommend` — Recommend tightest-fit room
-- `POST   /api/rooms/seed` — Seed official CMKL classrooms (Staff only)
+- `POST   /api/rooms/seed` — Load the CMKL seed rooms (Staff only)
 
 ### Reservations & Schedule
 - `GET    /api/reservations` — List reservations (optional `?room_id=...`)
@@ -105,13 +111,14 @@ Server runs at `http://127.0.0.1:5000` with CORS enabled for the React frontend.
 
 ## Testing & Quality Assurance
 
-### Run All 129 Unit Tests
+### Run all 129 unit tests
 ```bash
 python -m unittest discover -s RoomService -p "test_*.py"
 python -m unittest discover -s AuthService -p "test_*.py"
 python -m unittest discover -s ApiGateway -p "test_*.py"
 python -m unittest discover -s Database -p "test_*.py"
 python -m unittest discover -s Reservation -p "test_*.py"
+python -m unittest test_desktop_app
 ```
 
 ### Run Coding Standard Lint Checks (PEP 8, 79-character limit)

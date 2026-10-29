@@ -4,20 +4,13 @@
 // date: 2026-10-20
 
 import React, { useState } from 'react';
-import {
-  Calendar,
-  Sun,
-  Moon,
-  Menu,
-  RotateCcw,
-  LogIn,
-  LogOut,
-  Shield,
-  GraduationCap,
-  CalendarDays,
-} from 'lucide-react';
+import { Sun, Moon, Menu, X } from 'lucide-react';
 
-const NAV_TITLE = 'CMKL Reserve';
+const NAV_ITEMS = [
+  { key: 'browse', id: 'nav-browse', label: 'Rooms' },
+  { key: 'my-reservations', id: 'nav-my-reservations', label: 'Reservations' },
+  { key: 'schedule', id: 'nav-schedule', label: 'Weekly schedule' },
+];
 
 /**
  * Main application navigation header.
@@ -29,7 +22,7 @@ const NAV_TITLE = 'CMKL Reserve';
  * @param {Object|null} props.currentUser - Authenticated user profile.
  * @param {function} props.onOpenLogin - Handler to open login modal.
  * @param {function} props.onLogout - Handler to sign out.
- * @param {function} props.onResetSeed - Handler to reset database to official seed data.
+ * @param {function} props.onResetSeed - Handler to reset local data to the test plan seed.
  * @returns {JSX.Element} The NavBar component.
  */
 export default function NavBar({
@@ -44,213 +37,154 @@ export default function NavBar({
 }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const handleToggleMenu = () => setIsMobileMenuOpen(!isMobileMenuOpen);
+  const runAndClose = (action) => () => {
+    action();
+    setIsMobileMenuOpen(false);
+  };
+
+  const themeLabel = isDarkMode ? 'Switch to light mode' : 'Switch to dark mode';
+  const ThemeIcon = isDarkMode ? Sun : Moon;
 
   return (
-    <nav className="bg-slate-900 text-white shadow-lg sticky top-0 z-40 border-b border-slate-800">
+    <nav className="bg-slate-900 text-white sticky top-0 z-40 border-b border-slate-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
-          {/* Logo / Brand */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shadow-md shadow-blue-500/20">
-              <Calendar className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <span className="font-bold text-lg tracking-tight block leading-tight">
-                {NAV_TITLE}
-              </span>
-              <span className="text-[10px] text-blue-300 font-medium tracking-wide uppercase">
-                Team Vibranium
-              </span>
+        <div className="flex justify-between items-stretch h-14">
+          <div className="flex items-stretch gap-8">
+            <span className="flex items-center gap-2 font-semibold tracking-tight">
+              <span className="text-brand-300">CMKL</span>
+              <span>Rooms</span>
+            </span>
+
+            <div className="hidden md:flex items-stretch gap-1">
+              {NAV_ITEMS.map((item) => {
+                const isActive = activeView === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    id={item.id}
+                    onClick={() => onNavigate(item.key)}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={`px-3 text-sm font-medium border-b-2 transition-colors ${
+                      isActive
+                        ? 'border-brand-300 text-white'
+                        : 'border-transparent text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Desktop Navigation Links */}
-          <div className="hidden md:flex items-center space-x-1 lg:space-x-2">
-            <button
-              id="nav-browse"
-              onClick={() => onNavigate('browse')}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeView === 'browse'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              Browse Rooms
-            </button>
-            <button
-              id="nav-my-reservations"
-              onClick={() => onNavigate('my-reservations')}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeView === 'my-reservations'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              Reservations
-            </button>
-            <button
-              id="nav-schedule"
-              onClick={() => onNavigate('schedule')}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                activeView === 'schedule'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <CalendarDays className="w-4 h-4" />
-              Schedule
-            </button>
-
-            {/* Reset to Test Seed Button */}
+          <div className="hidden md:flex items-center gap-1 text-sm">
             <button
               id="btn-reset-seed"
               onClick={onResetSeed}
-              title="Reset database to official test plan seed data"
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-medium transition-colors border border-slate-700 ml-2"
+              title="Restore the rooms and reservations from the test plan"
+              className="px-3 py-2 rounded-md text-xs text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
             >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span className="hidden lg:inline">Reset Seed</span>
+              Reset demo data
             </button>
 
-            {/* Dark Mode Toggle */}
             <button
               id="toggle-dark-mode"
               onClick={toggleDarkMode}
-              className="p-2 text-slate-300 hover:text-white hover:bg-slate-800 rounded-lg transition-colors ml-1"
-              aria-label="Toggle Dark Mode"
+              aria-label={themeLabel}
+              title={themeLabel}
+              className="p-2.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
             >
-              {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
+              <ThemeIcon className="w-4 h-4" aria-hidden="true" />
             </button>
 
-            {/* User Profile / Auth State */}
             {currentUser ? (
-              <div className="ml-2 flex items-center gap-3 pl-3 border-l border-slate-800">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center font-bold text-xs">
-                    {currentUser.name ? currentUser.name.slice(0, 2).toUpperCase() : 'US'}
-                  </div>
-                  <div className="text-left hidden lg:block">
-                    <p className="text-xs font-medium text-white leading-tight">
-                      {currentUser.name || currentUser.email}
-                    </p>
-                    <span
-                      className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.2 rounded ${
-                        currentUser.role === 'Staff'
-                          ? 'bg-blue-900/60 text-blue-300'
-                          : 'bg-indigo-900/60 text-indigo-300'
-                      }`}
-                    >
-                      {currentUser.role === 'Staff' ? (
-                        <Shield className="w-2.5 h-2.5" />
-                      ) : (
-                        <GraduationCap className="w-2.5 h-2.5" />
-                      )}
-                      {currentUser.role}
-                    </span>
-                  </div>
-                </div>
+              <div className="ml-2 pl-3 flex items-center gap-3 border-l border-slate-700">
+                <span className="text-right leading-tight">
+                  <span className="block text-xs text-white">
+                    {currentUser.name || currentUser.email}
+                  </span>
+                  <span className="block text-[11px] text-slate-400">{currentUser.role}</span>
+                </span>
                 <button
                   id="btn-sign-out"
                   onClick={onLogout}
-                  title="Sign Out"
-                  className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors"
+                  className="px-3 py-2 rounded-md text-xs text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
                 >
-                  <LogOut className="w-4 h-4" />
+                  Sign out
                 </button>
               </div>
             ) : (
               <button
                 id="btn-sign-in"
                 onClick={onOpenLogin}
-                className="ml-2 flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
+                className="ml-2 px-3 py-1.5 rounded-md text-xs font-semibold bg-brand-600 hover:bg-brand-700 text-white transition-colors"
               >
-                <LogIn className="w-3.5 h-3.5" />
-                Sign In
+                Sign in
               </button>
             )}
           </div>
 
-          {/* Mobile Menu Button */}
-          <div className="flex items-center md:hidden gap-2">
+          <div className="flex items-center md:hidden gap-1">
             <button
               onClick={toggleDarkMode}
-              className="p-2 text-slate-300 hover:text-white rounded-lg"
-              aria-label="Toggle Dark Mode"
+              aria-label={themeLabel}
+              className="p-2.5 rounded-md text-slate-300 hover:text-white"
             >
-              {isDarkMode ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5" />}
+              <ThemeIcon className="w-5 h-5" aria-hidden="true" />
             </button>
             <button
-              onClick={handleToggleMenu}
-              className="text-slate-300 hover:text-white p-2 rounded-lg"
-              aria-label="Open menu"
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={isMobileMenuOpen}
+              className="p-2.5 rounded-md text-slate-300 hover:text-white"
             >
-              <Menu className="h-6 w-6" />
+              {isMobileMenuOpen ? (
+                <X className="w-5 h-5" aria-hidden="true" />
+              ) : (
+                <Menu className="w-5 h-5" aria-hidden="true" />
+              )}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Mobile Dropdown */}
       {isMobileMenuOpen && (
-        <div className="md:hidden bg-slate-800/95 border-t border-slate-700 pb-3 px-4 pt-2 space-y-2">
-          <button
-            onClick={() => {
-              onNavigate('browse');
-              setIsMobileMenuOpen(false);
-            }}
-            className="block w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-white hover:bg-slate-700"
-          >
-            Browse Rooms
-          </button>
-          <button
-            onClick={() => {
-              onNavigate('my-reservations');
-              setIsMobileMenuOpen(false);
-            }}
-            className="block w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700"
-          >
-            Reservations
-          </button>
-          <button
-            onClick={() => {
-              onNavigate('schedule');
-              setIsMobileMenuOpen(false);
-            }}
-            className="block w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700"
-          >
-            Weekly Schedule
-          </button>
-          <button
-            onClick={() => {
-              onResetSeed();
-              setIsMobileMenuOpen(false);
-            }}
-            className="block w-full text-left px-3 py-2 rounded-lg text-xs font-medium text-amber-300 hover:bg-slate-700"
-          >
-            Reset Seed Data
-          </button>
-          {currentUser ? (
+        <div className="md:hidden border-t border-slate-800 px-4 py-2 space-y-1">
+          {NAV_ITEMS.map((item) => (
             <button
-              onClick={() => {
-                onLogout();
-                setIsMobileMenuOpen(false);
-              }}
-              className="block w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-rose-300 hover:bg-slate-700"
+              key={item.key}
+              onClick={runAndClose(() => onNavigate(item.key))}
+              aria-current={activeView === item.key ? 'page' : undefined}
+              className={`block w-full text-left px-3 py-2.5 rounded-md text-sm font-medium hover:bg-slate-800 ${
+                activeView === item.key ? 'text-white' : 'text-slate-400'
+              }`}
             >
-              Sign Out ({currentUser.name})
+              {item.label}
             </button>
-          ) : (
+          ))}
+          <div className="pt-1 mt-1 border-t border-slate-800">
             <button
-              onClick={() => {
-                onOpenLogin();
-                setIsMobileMenuOpen(false);
-              }}
-              className="block w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-blue-300 hover:bg-slate-700"
+              onClick={runAndClose(onResetSeed)}
+              className="block w-full text-left px-3 py-2.5 rounded-md text-xs text-slate-400 hover:bg-slate-800"
             >
-              Sign In
+              Reset demo data
             </button>
-          )}
+            {currentUser ? (
+              <button
+                onClick={runAndClose(onLogout)}
+                className="block w-full text-left px-3 py-2.5 rounded-md text-sm text-slate-300 hover:bg-slate-800"
+              >
+                Sign out ({currentUser.name || currentUser.email})
+              </button>
+            ) : (
+              <button
+                onClick={runAndClose(onOpenLogin)}
+                className="block w-full text-left px-3 py-2.5 rounded-md text-sm text-brand-300 hover:bg-slate-800"
+              >
+                Sign in
+              </button>
+            )}
+          </div>
         </div>
       )}
     </nav>

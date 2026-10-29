@@ -4,9 +4,10 @@
 // date: 2026-10-20
 
 import React, { useState } from 'react';
-import { X, Calendar, CheckCircle2, AlertCircle } from 'lucide-react';
 
 import { createReservation, editReservation, SEMESTER_START, SEMESTER_END } from '../api/reservationApi';
+import ModalShell from './ModalShell';
+import { LABEL, INPUT, BTN_PRIMARY, BTN_SECONDARY, ERROR_BOX } from '../utils/styles';
 
 /**
  * Modal dialog for creating or updating a room reservation.
@@ -47,10 +48,6 @@ export default function ReservationModal({
   const targetRoom = (rooms.length > 0 ? rooms.find((r) => r.room_id === selectedRoomId) : null) || room;
   const roomCapacity = targetRoom?.capacity || 40;
 
-  /**
-   * Submit the reservation form.
-   * @param {React.FormEvent} e - Form event.
-   */
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage('');
@@ -118,189 +115,159 @@ export default function ReservationModal({
     }
   };
 
+  const roomLabel = targetRoom?.room_id || selectedRoomId;
+  const title = isEditing
+    ? `Edit ${reservation.competency}, room ${reservation.room_id}`
+    : `Book room ${roomLabel}${targetRoom?.name ? ` (${targetRoom.name})` : ''}`;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-700 my-8">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 text-white flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-5 h-5" />
-            <h2 className="text-xl font-bold">
-              {isEditing
-                ? `Edit Reservation (${reservation.competency} — Room ${reservation.room_id})`
-                : `Reserve Room ${targetRoom?.room_id || selectedRoomId}${targetRoom?.name ? ` — ${targetRoom.name}` : ''}`}
-            </h2>
-          </div>
-          <button
-            id="modal-close"
-            onClick={onClose}
-            className="text-blue-100 hover:text-white p-1 rounded-lg"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <ModalShell title={title} onClose={onClose} size="lg">
+      {showSuccess ? (
+        <p className="p-5 text-sm text-slate-700 dark:text-slate-200 tabular-nums">
+          {isEditing ? 'Saved.' : 'Booked.'} {competency.toUpperCase()} in room {roomLabel},{' '}
+          {startTime}–{endTime}.
+        </p>
+      ) : (
+        <form id="reservation-form" onSubmit={handleSubmit} className="p-5 space-y-4">
+          {errorMessage && <div className={ERROR_BOX}>{errorMessage}</div>}
 
-        {/* Success View */}
-        {showSuccess ? (
-          <div className="p-8 flex flex-col items-center justify-center text-center">
-            <CheckCircle2 className="w-16 h-16 text-green-500 mb-3 animate-bounce" />
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-1">
-              {isEditing ? 'Reservation Updated!' : 'Reservation Confirmed!'}
-            </h3>
-            <p className="text-slate-600 dark:text-slate-300 text-sm">
-              {competency.toUpperCase()} booked in Room {targetRoom?.room_id || selectedRoomId} ({targetRoom?.name || ''}) for {startTime} - {endTime}.
-            </p>
-          </div>
-        ) : (
-          /* Form View */
-          <form id="reservation-form" onSubmit={handleSubmit} className="p-6 space-y-4">
-            {errorMessage && (
-              <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800/60 text-red-700 dark:text-red-300 rounded-lg text-sm flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-                <span>{errorMessage}</span>
-              </div>
-            )}
-
-            {/* Room selection (if multiple rooms available) */}
-            {rooms.length > 0 && !room && (
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Select Classroom *
-                </label>
-                <select
-                  id="reservation-room-select"
-                  value={selectedRoomId}
-                  onChange={(e) => setSelectedRoomId(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                >
-                  {[...rooms]
-                    .sort((a, b) => parseInt(a.room_id || a.id, 10) - parseInt(b.room_id || b.id, 10))
-                    .map((r) => (
-                      <option key={r.room_id || r.id} value={r.room_id || r.id}>
-                        Room {r.room_id || r.id} — {r.name} (Seats: {r.capacity})
-                      </option>
-                    ))}
-                </select>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Competency / Course *
-                </label>
-                <input
-                  id="reservation-competency"
-                  type="text"
-                  required
-                  value={competency}
-                  onChange={(e) => setCompetency(e.target.value)}
-                  placeholder="e.g. SEN-201"
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none uppercase"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Group Size * (Max {roomCapacity})
-                </label>
-                <input
-                  id="reservation-group-size"
-                  type="number"
-                  required
-                  min="1"
-                  max={roomCapacity}
-                  value={groupSize}
-                  onChange={(e) => setGroupSize(e.target.value)}
-                  placeholder={`Max: ${roomCapacity}`}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Date *
-                </label>
-                <input
-                  id="reservation-date"
-                  type="date"
-                  required
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Repetition
-                </label>
-                <select
-                  id="reservation-repetition"
-                  value={repetition === 'None' ? 'Once' : repetition}
-                  onChange={(e) => setRepetition(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                >
-                  <option value="Weekly">Weekly (Semester)</option>
-                  <option value="Once">Single Slot</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Start Time *
-                </label>
-                <input
-                  id="reservation-start-time"
-                  type="time"
-                  required
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  End Time *
-                </label>
-                <input
-                  id="reservation-end-time"
-                  type="time"
-                  required
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                />
-              </div>
-            </div>
-
-            <div className="pt-3 flex justify-end gap-3">
-              <button
-                id="modal-cancel"
-                type="button"
-                onClick={onClose}
-                disabled={isLoading}
-                className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+          {rooms.length > 0 && !room && (
+            <div>
+              <label htmlFor="reservation-room-select" className={LABEL}>
+                Room
+              </label>
+              <select
+                id="reservation-room-select"
+                value={selectedRoomId}
+                onChange={(e) => setSelectedRoomId(e.target.value)}
+                className={INPUT}
               >
-                Cancel
-              </button>
-              <button
-                id="modal-confirm"
-                type="submit"
-                disabled={isLoading}
-                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm disabled:opacity-60 flex items-center justify-center min-w-[110px]"
-              >
-                {isLoading ? 'Checking...' : isEditing ? 'Save Changes' : 'Confirm'}
-              </button>
+                {[...rooms]
+                  .sort((a, b) => parseInt(a.room_id || a.id, 10) - parseInt(b.room_id || b.id, 10))
+                  .map((r) => (
+                    <option key={r.room_id || r.id} value={r.room_id || r.id}>
+                      {r.room_id || r.id} {r.name} ({r.capacity} seats)
+                    </option>
+                  ))}
+              </select>
             </div>
-          </form>
-        )}
-      </div>
-    </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="reservation-competency" className={LABEL}>
+                Course code
+              </label>
+              <input
+                id="reservation-competency"
+                type="text"
+                required
+                value={competency}
+                onChange={(e) => setCompetency(e.target.value)}
+                placeholder="e.g. SEN-201"
+                className={`${INPUT} uppercase`}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="reservation-group-size" className={LABEL}>
+                Students <span className="font-normal text-slate-500">(max {roomCapacity})</span>
+              </label>
+              <input
+                id="reservation-group-size"
+                type="number"
+                required
+                min="1"
+                max={roomCapacity}
+                value={groupSize}
+                onChange={(e) => setGroupSize(e.target.value)}
+                className={INPUT}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="reservation-date" className={LABEL}>
+                {repetition === 'Weekly' ? 'First class' : 'Date'}
+              </label>
+              <input
+                id="reservation-date"
+                type="date"
+                required
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className={INPUT}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="reservation-repetition" className={LABEL}>
+                Repeats
+              </label>
+              <select
+                id="reservation-repetition"
+                value={repetition}
+                onChange={(e) => setRepetition(e.target.value)}
+                className={INPUT}
+              >
+                <option value="Weekly">Weekly until {SEMESTER_END}</option>
+                <option value="Once">Once</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="reservation-start-time" className={LABEL}>
+                Start
+              </label>
+              <input
+                id="reservation-start-time"
+                type="time"
+                required
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                className={INPUT}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="reservation-end-time" className={LABEL}>
+                End
+              </label>
+              <input
+                id="reservation-end-time"
+                type="time"
+                required
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                className={INPUT}
+              />
+            </div>
+          </div>
+
+          <div className="pt-1 flex justify-end gap-2">
+            <button
+              id="modal-cancel"
+              type="button"
+              onClick={onClose}
+              disabled={isLoading}
+              className={BTN_SECONDARY}
+            >
+              Cancel
+            </button>
+            <button
+              id="modal-confirm"
+              type="submit"
+              disabled={isLoading}
+              className={`${BTN_PRIMARY} min-w-[110px]`}
+            >
+              {isLoading ? 'Checking…' : isEditing ? 'Save changes' : 'Book'}
+            </button>
+          </div>
+        </form>
+      )}
+    </ModalShell>
   );
 }

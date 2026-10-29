@@ -9,7 +9,7 @@ const TOKEN_STORAGE_KEY = 'vibranium_auth_token';
 const USER_STORAGE_KEY = 'vibranium_auth_user';
 
 /**
- * Known seed accounts matching official functional test plan (Vibranium Test Plan).
+ * Test accounts from the Vibranium Functional Test Plan.
  */
 export const SEED_USERS = [
   {
@@ -129,7 +129,7 @@ export async function loginUser(email, password) {
     setStoredSession(data.token, data.user);
     return data;
   } catch (err) {
-    // If backend refused or is offline, check official seed users
+    // Backend refused or offline: fall back to the test accounts
     const matched = SEED_USERS.find(
       (entry) => entry.email.toLowerCase() === trimmedEmail.toLowerCase()
     );

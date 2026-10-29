@@ -13,9 +13,9 @@ export const SEMESTER_START = '2026-08-17';
 export const SEMESTER_END = '2026-12-01';
 
 /**
- * Official seed reservations specified in the Functional Test Plan.
+ * Seed reservations from the Vibranium Functional Test Plan.
  */
-export const OFFICIAL_SEED_RESERVATIONS = [
+export const SEED_RESERVATIONS = [
   {
     reservation_id: 'RES-1',
     competency: 'SEN-201',
@@ -76,14 +76,14 @@ function getLocalReservations() {
   if (!raw) {
     localStorage.setItem(
       RESERVATIONS_STORAGE_KEY,
-      JSON.stringify(OFFICIAL_SEED_RESERVATIONS)
+      JSON.stringify(SEED_RESERVATIONS)
     );
-    return OFFICIAL_SEED_RESERVATIONS;
+    return SEED_RESERVATIONS;
   }
   try {
     return JSON.parse(raw);
   } catch {
-    return OFFICIAL_SEED_RESERVATIONS;
+    return SEED_RESERVATIONS;
   }
 }
 
@@ -333,12 +333,12 @@ export async function exportScheduleReport(weekStart, roomId) {
 }
 
 /**
- * Reset local reservations to official seed test data.
+ * Reset the local reservation store back to the seed reservations.
  */
 export function resetReservationsToSeed() {
   localStorage.setItem(
     RESERVATIONS_STORAGE_KEY,
-    JSON.stringify(OFFICIAL_SEED_RESERVATIONS)
+    JSON.stringify(SEED_RESERVATIONS)
   );
-  return OFFICIAL_SEED_RESERVATIONS;
+  return SEED_RESERVATIONS;
 }

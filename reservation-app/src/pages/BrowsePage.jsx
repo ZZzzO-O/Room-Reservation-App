@@ -4,32 +4,49 @@
 // date: 2026-10-20
 
 import React, { useState, useMemo } from 'react';
-import {
-  Search,
-  Users,
-  Monitor,
-  Plus,
-  CheckSquare,
-  Laptop,
-  BookOpen,
-  FlaskConical,
-  Briefcase,
-  LayoutGrid,
-  X,
-} from 'lucide-react';
+import { Search, X } from 'lucide-react';
 
 import RoomCard from '../components/RoomCard';
 import RoomModal from '../components/RoomModal';
 import UnavailabilityModal from '../components/UnavailabilityModal';
+import ModalShell from '../components/ModalShell';
 import { deleteRoom } from '../api/roomApi';
+import { INPUT, BTN_PRIMARY, BTN_SECONDARY, BTN_DANGER, ERROR_BOX } from '../utils/styles';
 
 const CATEGORY_TABS = [
-  { key: 'ALL', label: 'All Spaces', icon: LayoutGrid },
-  { key: 'Classroom', label: 'Classrooms', icon: BookOpen },
-  { key: 'Lab', label: 'Lab', icon: FlaskConical },
-  { key: 'Computer Lab', label: 'Computer Lab (Cube)', icon: Laptop },
-  { key: 'Meeting Room', label: 'Meeting Rooms', icon: Briefcase },
+  { key: 'ALL', label: 'All' },
+  { key: 'Classroom', label: 'Classrooms' },
+  { key: 'Lab', label: 'Labs' },
+  { key: 'Computer Lab', label: 'Computer lab' },
+  { key: 'Meeting Room', label: 'Meeting rooms' },
 ];
+
+/**
+ * Checkbox used for the equipment filters.
+ * @param {Object} props
+ * @param {string} props.id - Input id.
+ * @param {string} props.label - Visible label.
+ * @param {boolean} props.checked - Current state.
+ * @param {function} props.onChange - Called with the new checked value.
+ * @returns {JSX.Element} The filter toggle.
+ */
+function FilterToggle({ id, label, checked, onChange }) {
+  return (
+    <label
+      htmlFor={id}
+      className="inline-flex items-center gap-2 px-1 py-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer select-none"
+    >
+      <input
+        id={id}
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="w-4 h-4 accent-brand-600"
+      />
+      {label}
+    </label>
+  );
+}
 
 /**
  * Main classroom browsing dashboard.
@@ -53,7 +70,6 @@ export default function BrowsePage({
   const [needsWhiteboard, setNeedsWhiteboard] = useState(false);
   const [needsComputers, setNeedsComputers] = useState(false);
 
-  // Modal states
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [roomToEdit, setRoomToEdit] = useState(null);
   const [unavailRoom, setUnavailRoom] = useState(null);
@@ -115,24 +131,20 @@ export default function BrowsePage({
     needsComputers,
   ]);
 
-  /** Open modal to create a new room. */
   const handleOpenAddRoom = () => {
     setRoomToEdit(null);
     setIsRoomModalOpen(true);
   };
 
-  /** Open modal to edit an existing room. */
   const handleOpenEditRoom = (room) => {
     setRoomToEdit(room);
     setIsRoomModalOpen(true);
   };
 
-  /** Open modal to mark room closed. */
   const handleOpenUnavail = (room) => {
     setUnavailRoom(room);
   };
 
-  /** Handle room deletion request. */
   const handleConfirmDeleteRoom = async () => {
     if (!deleteTargetRoom) return;
     setDeleteError('');
@@ -145,157 +157,127 @@ export default function BrowsePage({
     }
   };
 
+  const segmentClass = (isSelected) =>
+    `px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+      isSelected
+        ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+    }`;
+
+  const closeDeleteDialog = () => {
+    setDeleteTargetRoom(null);
+    setDeleteError('');
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Top Banner & Search Filter Bar */}
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors space-y-4">
-        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-              CMKL Campus Spaces
-            </h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Official catalog of classrooms, labs, and meeting facilities for Fall 2026.
-            </p>
-          </div>
+    <div className="space-y-5">
+      <header className="flex flex-col sm:flex-row justify-between sm:items-end gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+            Rooms
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 tabular-nums">
+            {filteredRooms.length === rooms.length
+              ? `${rooms.length} bookable rooms · Fall 2026`
+              : `Showing ${filteredRooms.length} of ${rooms.length} rooms`}
+          </p>
+        </div>
 
-          {isStaff && (
+        {isStaff && (
+          <button id="btn-add-room" onClick={handleOpenAddRoom} className={`${BTN_PRIMARY} shrink-0`}>
+            Add room
+          </button>
+        )}
+      </header>
+
+      <section
+        aria-label="Filters"
+        className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700 space-y-3"
+      >
+        <div
+          role="tablist"
+          aria-label="Room type"
+          className="inline-flex flex-wrap gap-0.5 p-0.5 rounded-lg bg-slate-100 dark:bg-slate-900"
+        >
+          {CATEGORY_TABS.map((tab) => (
             <button
-              id="btn-add-room"
-              onClick={handleOpenAddRoom}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-sm transition-colors shrink-0"
+              key={tab.key}
+              role="tab"
+              aria-selected={selectedCategory === tab.key}
+              onClick={() => setSelectedCategory(tab.key)}
+              className={segmentClass(selectedCategory === tab.key)}
             >
-              <Plus className="w-4 h-4" />
-              Add Room
+              {tab.label}
             </button>
-          )}
+          ))}
         </div>
 
-        {/* Category Pills */}
-        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-700/60">
-          {CATEGORY_TABS.map((tab) => {
-            const Icon = tab.icon;
-            const isSelected = selectedCategory === tab.key;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setSelectedCategory(tab.key)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                  isSelected
-                    ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20'
-                    : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Filter Controls */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-2">
-          {/* Search bar prioritized for room numbers */}
-          <div className="md:col-span-5 relative">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
+        <div className="flex flex-col md:flex-row md:items-center gap-3">
+          <div className="relative md:w-80">
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none"
+              aria-hidden="true"
+            />
             <input
               id="search-rooms"
-              type="text"
-              placeholder="Search room number (e.g. 604, 609, 601) or name..."
+              type="search"
+              aria-label="Search rooms"
+              placeholder="Room number or name, e.g. 604"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-10 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              className={`${INPUT} pl-9 pr-9`}
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-100 transition-colors"
+                className="absolute right-1 top-1/2 -translate-y-1/2 p-2 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-100"
                 aria-label="Clear room search"
-                title="Clear search"
               >
                 <X className="w-4 h-4" aria-hidden="true" />
               </button>
             )}
           </div>
 
-          {/* Typed Capacity Input */}
-          <div className="md:col-span-3 relative">
-            <Users className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4 pointer-events-none" />
+          <div className="md:w-36">
             <input
               id="filter-capacity"
               type="number"
               min="1"
-              placeholder="Min seats (e.g. 35)"
+              aria-label="Minimum seats"
+              placeholder="Min. seats"
               value={minCapacity}
               onChange={(e) => setMinCapacity(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              className={INPUT}
             />
           </div>
 
-          {/* Equipment Checkboxes */}
-          <div className="md:col-span-4 flex flex-wrap items-center gap-2">
-            <label
-              htmlFor="filter-projector"
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium cursor-pointer border transition-colors select-none ${
-                needsProjector
-                  ? 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-900/30 dark:border-blue-700 dark:text-blue-300'
-                  : 'bg-slate-50 border-slate-200 text-slate-600 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-400'
-              }`}
-            >
-              <input
-                id="filter-projector"
-                type="checkbox"
-                checked={needsProjector}
-                onChange={(e) => setNeedsProjector(e.target.checked)}
-                className="hidden"
-              />
-              <Monitor className="w-3.5 h-3.5" /> Projector
-            </label>
-
-            <label
-              htmlFor="filter-whiteboard"
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium cursor-pointer border transition-colors select-none ${
-                needsWhiteboard
-                  ? 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-900/30 dark:border-blue-700 dark:text-blue-300'
-                  : 'bg-slate-50 border-slate-200 text-slate-600 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-400'
-              }`}
-            >
-              <input
-                id="filter-whiteboard"
-                type="checkbox"
-                checked={needsWhiteboard}
-                onChange={(e) => setNeedsWhiteboard(e.target.checked)}
-                className="hidden"
-              />
-              <CheckSquare className="w-3.5 h-3.5" /> Whiteboard
-            </label>
-
-            <label
-              htmlFor="filter-computers"
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium cursor-pointer border transition-colors select-none ${
-                needsComputers
-                  ? 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-900/30 dark:border-blue-700 dark:text-blue-300'
-                  : 'bg-slate-50 border-slate-200 text-slate-600 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-400'
-              }`}
-            >
-              <input
-                id="filter-computers"
-                type="checkbox"
-                checked={needsComputers}
-                onChange={(e) => setNeedsComputers(e.target.checked)}
-                className="hidden"
-              />
-              <Laptop className="w-3.5 h-3.5" /> Lab Computers
-            </label>
+          <div className="flex flex-wrap items-center gap-x-4">
+            <FilterToggle
+              id="filter-projector"
+              label="Projector"
+              checked={needsProjector}
+              onChange={setNeedsProjector}
+            />
+            <FilterToggle
+              id="filter-whiteboard"
+              label="Whiteboard"
+              checked={needsWhiteboard}
+              onChange={setNeedsWhiteboard}
+            />
+            <FilterToggle
+              id="filter-computers"
+              label="Computers"
+              checked={needsComputers}
+              onChange={setNeedsComputers}
+            />
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Classrooms Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredRooms.length > 0 ? (
-          filteredRooms.map((room) => (
+      {filteredRooms.length > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filteredRooms.map((room) => (
             <RoomCard
               key={room.room_id || room.id}
               room={room}
@@ -305,21 +287,19 @@ export default function BrowsePage({
               onDeleteClick={(r) => setDeleteTargetRoom(r)}
               onUnavailClick={handleOpenUnavail}
             />
-          ))
-        ) : (
-          <div className="col-span-full py-16 text-center bg-white dark:bg-slate-800 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
-            <Search className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-              No matching spaces found
-            </h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Try adjusting your category selection, seat capacity, or equipment filters.
-            </p>
-          </div>
-        )}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="py-12 text-center rounded-lg border border-dashed border-slate-300 dark:border-slate-700">
+          <p className="text-sm font-medium text-slate-900 dark:text-white">
+            No rooms match these filters.
+          </p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Try a smaller seat count or fewer equipment requirements.
+          </p>
+        </div>
+      )}
 
-      {/* Room Add / Edit Modal */}
       {isRoomModalOpen && (
         <RoomModal
           isOpen={isRoomModalOpen}
@@ -329,7 +309,6 @@ export default function BrowsePage({
         />
       )}
 
-      {/* Mark Unavailable Modal */}
       {unavailRoom && (
         <UnavailabilityModal
           isOpen={Boolean(unavailRoom)}
@@ -339,39 +318,27 @@ export default function BrowsePage({
         />
       )}
 
-      {/* Delete Room Confirmation Modal */}
       {deleteTargetRoom && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4 border border-slate-200 dark:border-slate-700">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-              Delete Room {deleteTargetRoom.name}?
-            </h3>
+        <ModalShell
+          title={`Delete room ${deleteTargetRoom.room_id || deleteTargetRoom.id}?`}
+          onClose={closeDeleteDialog}
+        >
+          <div className="p-5 space-y-4">
             <p className="text-sm text-slate-600 dark:text-slate-300">
-              This will remove the room from the campus catalog. If active reservations exist for this room, deletion will be rejected.
+              {deleteTargetRoom.name || 'This room'} will be removed from the catalog. Rooms
+              with reservations can’t be deleted.
             </p>
-            {deleteError && (
-              <div className="p-3 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg text-xs">
-                {deleteError}
-              </div>
-            )}
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setDeleteTargetRoom(null)}
-                className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm"
-              >
+            {deleteError && <div className={ERROR_BOX}>{deleteError}</div>}
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={closeDeleteDialog} className={BTN_SECONDARY}>
                 Cancel
               </button>
-              <button
-                type="button"
-                onClick={handleConfirmDeleteRoom}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold"
-              >
-                Confirm Delete
+              <button type="button" onClick={handleConfirmDeleteRoom} className={BTN_DANGER}>
+                Delete room
               </button>
             </div>
           </div>
-        </div>
+        </ModalShell>
       )}
     </div>
   );

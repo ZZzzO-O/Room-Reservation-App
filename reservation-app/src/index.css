@@ -1,14 +1,46 @@
 /* file: index.css */
-/* purpose: Global stylesheet — Tailwind v4 entry point */
+/* purpose: Global stylesheet — Tailwind v4 entry point and brand tokens */
 /* author: Zin Zin Zaw Win */
 /* date: 2026-10-16 */
 
 @import "tailwindcss";
 
-/*
-  Configure class-based dark mode for Tailwind v4.
-  By default, Tailwind v4 uses the prefers-color-scheme media query.
-  This line tells it to apply dark: variants whenever a .dark class
-  is present on any ancestor element instead.
-*/
+/* dark: variants follow the .dark class on <App> instead of the OS setting */
 @custom-variant dark (&:where(.dark, .dark *));
+
+/*
+  Brand tokens. Every accent in the UI uses brand-*, so changing the
+  scale here re-themes the whole app. Swap in CMKL's official colour
+  when we have it from the style guide.
+*/
+@theme {
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --color-brand-50: #eef6f7;
+  --color-brand-100: #d5e9ec;
+  --color-brand-200: #acd3d9;
+  --color-brand-300: #7bb5bf;
+  --color-brand-400: #4b939f;
+  --color-brand-500: #2f7784;
+  --color-brand-600: #1f5f6b;
+  --color-brand-700: #1a4d57;
+  --color-brand-800: #173f47;
+  --color-brand-900: #14343b;
+  --color-brand-950: #0b2126;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.6);
+}

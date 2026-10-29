@@ -4,9 +4,12 @@
 // date: 2026-10-20
 
 import React, { useState } from 'react';
-import { X, Building2, AlertCircle } from 'lucide-react';
 
 import { createRoom, editRoom } from '../api/roomApi';
+import ModalShell from './ModalShell';
+import { LABEL, INPUT, BTN_PRIMARY, BTN_SECONDARY, ERROR_BOX } from '../utils/styles';
+
+const ROOM_TYPES = ['Classroom', 'Lab', 'Computer Lab', 'Meeting Room'];
 
 /**
  * Dialog for adding a new room or updating an existing room's attributes.
@@ -34,10 +37,6 @@ export default function RoomModal({ isOpen, room, onClose, onSuccess }) {
 
   if (!isOpen) return null;
 
-  /**
-   * Submit create or update request.
-   * @param {React.FormEvent} e - Form submission event.
-   */
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage('');
@@ -89,176 +88,104 @@ export default function RoomModal({ isOpen, room, onClose, onSuccess }) {
     }
   };
 
+  const equipmentFields = [
+    { id: 'room-modal-projector', label: 'Projectors', value: projector, set: setProjector },
+    { id: 'room-modal-whiteboard', label: 'Whiteboards', value: whiteboard, set: setWhiteboard },
+    { id: 'room-modal-computers', label: 'Computers', value: computers, set: setComputers },
+    { id: 'room-modal-mic', label: 'Microphones', value: mic, set: setMic },
+    { id: 'room-modal-tv', label: 'TV screens', value: tvScreen, set: setTvScreen },
+  ];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-700 my-8">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 text-white flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <Building2 className="w-5 h-5" />
-            <h2 className="text-xl font-bold">
-              {isEditing ? `Edit ${room.name}` : 'Add New Classroom'}
-            </h2>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-blue-100 hover:text-white p-1 rounded-lg"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <ModalShell
+      title={isEditing ? `Edit room ${room.room_id || room.id}` : 'Add room'}
+      onClose={onClose}
+      size="lg"
+    >
+      <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        {errorMessage && <div className={ERROR_BOX}>{errorMessage}</div>}
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {errorMessage && (
-            <div className="p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800/60 text-red-700 dark:text-red-300 rounded-lg text-sm flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-              <span>{errorMessage}</span>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Room Name *
-              </label>
-              <input
-                id="room-modal-name"
-                type="text"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Pioneer, Voyager"
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Space Category *
-              </label>
-              <select
-                id="room-modal-type"
-                value={roomType}
-                onChange={(e) => setRoomType(e.target.value)}
-                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-              >
-                <option value="Classroom">Classroom</option>
-                <option value="Lab">Lab</option>
-                <option value="Computer Lab">Computer Lab</option>
-                <option value="Meeting Room">Meeting Room</option>
-              </select>
-            </div>
-          </div>
-
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Seating Capacity *
+            <label htmlFor="room-modal-name" className={LABEL}>
+              Name
             </label>
             <input
-              id="room-modal-capacity"
-              type="number"
+              id="room-modal-name"
+              type="text"
               required
-              min="1"
-              value={capacity}
-              onChange={(e) => setCapacity(e.target.value)}
-              placeholder="e.g. 40"
-              className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Pioneer"
+              className={INPUT}
             />
           </div>
 
-          {/* Equipment Fields */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              Available Equipment
+            <label htmlFor="room-modal-type" className={LABEL}>
+              Type
             </label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-              <div>
-                <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">
-                  Projectors
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={projector}
-                  onChange={(e) => setProjector(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                  className="w-full px-2 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-sm text-slate-900 dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">
-                  Whiteboards
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={whiteboard}
-                  onChange={(e) => setWhiteboard(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                  className="w-full px-2 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-sm text-slate-900 dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">
-                  Computers
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={computers}
-                  onChange={(e) => setComputers(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                  className="w-full px-2 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-sm text-slate-900 dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">
-                  Microphones
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={mic}
-                  onChange={(e) => setMic(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                  className="w-full px-2 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-sm text-slate-900 dark:text-white"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">
-                  TV Screens
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={tvScreen}
-                  onChange={(e) => setTvScreen(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                  className="w-full px-2 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-sm text-slate-900 dark:text-white"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="pt-3 flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+            <select
+              id="room-modal-type"
+              value={roomType}
+              onChange={(e) => setRoomType(e.target.value)}
+              className={INPUT}
             >
-              Cancel
-            </button>
-            <button
-              id="room-modal-save"
-              type="submit"
-              disabled={isLoading}
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm disabled:opacity-60"
-            >
-              {isLoading ? 'Saving...' : 'Save Room'}
-            </button>
+              {ROOM_TYPES.map((type) => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+
+        <div className="sm:w-1/2 sm:pr-2">
+          <label htmlFor="room-modal-capacity" className={LABEL}>
+            Seats
+          </label>
+          <input
+            id="room-modal-capacity"
+            type="number"
+            required
+            min="1"
+            value={capacity}
+            onChange={(e) => setCapacity(e.target.value)}
+            placeholder="e.g. 40"
+            className={INPUT}
+          />
+        </div>
+
+        <fieldset className="pt-3 border-t border-slate-200 dark:border-slate-700">
+          <legend className="text-sm font-medium text-slate-700 dark:text-slate-300 pr-2">
+            Equipment
+          </legend>
+          <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {equipmentFields.map((field) => (
+              <div key={field.id}>
+                <label htmlFor={field.id} className="block text-xs text-slate-600 dark:text-slate-400 mb-1">
+                  {field.label}
+                </label>
+                <input
+                  id={field.id}
+                  type="number"
+                  min="0"
+                  value={field.value}
+                  onChange={(e) => field.set(Math.max(0, parseInt(e.target.value, 10) || 0))}
+                  className={INPUT}
+                />
+              </div>
+            ))}
+          </div>
+        </fieldset>
+
+        <div className="pt-1 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className={BTN_SECONDARY}>
+            Cancel
+          </button>
+          <button id="room-modal-save" type="submit" disabled={isLoading} className={BTN_PRIMARY}>
+            {isLoading ? 'Saving…' : isEditing ? 'Save changes' : 'Add room'}
+          </button>
+        </div>
+      </form>
+    </ModalShell>
   );
 }

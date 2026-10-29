@@ -10,12 +10,12 @@ const API_BASE_URL = '/api';
 const ROOMS_STORAGE_KEY = 'vibranium_rooms_store';
 
 /**
- * Official CMKL campus room directory matching the user's campus specification.
- * Note:
- * - Room 608 (Bridge): Water filling station & faculty area — Excluded from bookable classrooms.
- * - Room 706 (Apex SuperComputer): Server facility — Excluded from bookable classrooms.
+ * CMKL rooms used as seed data (Vibranium Functional Test Plan).
+ * Two rooms on the floor plan are left out because they aren't teaching rooms:
+ * - 608 (Bridge): water station and faculty area
+ * - 706 (Apex SuperComputer): server room
  */
-export const OFFICIAL_SEED_ROOMS = [
+export const SEED_ROOMS = [
   {
     room_id: '601',
     name: 'Pioneer',
@@ -215,15 +215,15 @@ export function sortRoomsByNumber(rooms) {
 function getLocalRooms() {
   const raw = localStorage.getItem(ROOMS_STORAGE_KEY);
   if (!raw) {
-    localStorage.setItem(ROOMS_STORAGE_KEY, JSON.stringify(OFFICIAL_SEED_ROOMS));
-    return sortRoomsByNumber(OFFICIAL_SEED_ROOMS.map(normalizeRoom));
+    localStorage.setItem(ROOMS_STORAGE_KEY, JSON.stringify(SEED_ROOMS));
+    return sortRoomsByNumber(SEED_ROOMS.map(normalizeRoom));
   }
   try {
     const list = JSON.parse(raw);
     const valid = list.filter((r) => !isNonClassroomFacility(r.room_id || r.id, r.name));
     return sortRoomsByNumber(valid.map(normalizeRoom));
   } catch {
-    return sortRoomsByNumber(OFFICIAL_SEED_ROOMS.map(normalizeRoom));
+    return sortRoomsByNumber(SEED_ROOMS.map(normalizeRoom));
   }
 }
 
@@ -405,9 +405,9 @@ export async function markRoomUnavailable(roomId, payload) {
 }
 
 /**
- * Reset local rooms and storage to official CMKL campus classrooms.
+ * Reset the local room store back to the seed rooms.
  */
 export function resetRoomsToSeed() {
-  localStorage.setItem(ROOMS_STORAGE_KEY, JSON.stringify(OFFICIAL_SEED_ROOMS));
-  return OFFICIAL_SEED_ROOMS.map(normalizeRoom);
+  localStorage.setItem(ROOMS_STORAGE_KEY, JSON.stringify(SEED_ROOMS));
+  return SEED_ROOMS.map(normalizeRoom);
 }

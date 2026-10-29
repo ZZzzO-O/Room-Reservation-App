@@ -38,3 +38,13 @@ dist/
 .DS_Store
 Thumbs.db
 
+
+# PyInstaller output
+build/
+
+# Local AI coding-assistant config
+.agent/
+.agents/
+.claude/
+.codex/
+.gemini/
