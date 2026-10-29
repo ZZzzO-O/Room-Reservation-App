@@ -183,6 +183,40 @@ class AuthService:
             self._db().save_user(self.conn, user)
         return user
 
+    def update_user(
+        self, email: str, password: str, role: str, name: str
+    ) -> User:
+        """
+        Set a registered user's password, role, and name, and save them.
+
+        Args:
+            email (str): Email of an existing user.
+            password (str): New plaintext password.
+            role (str): ROLE_STAFF or ROLE_PROFESSOR.
+            name (str): New display name.
+
+        Returns:
+            User: The updated user.
+
+        Raises:
+            InvalidCredentialsError: If the user, password, or role is
+                invalid.
+        """
+        user = self.users.get(normalize_email(email))
+        if user is None:
+            raise InvalidCredentialsError(f"No user with email {email}.")
+        if not password:
+            raise InvalidCredentialsError("Password must not be empty.")
+        if role not in (ROLE_STAFF, ROLE_PROFESSOR):
+            raise InvalidCredentialsError("Role must be Staff or Professor.")
+
+        user.password_hash, user.salt = hash_password(password)
+        user.role = role
+        user.name = name
+        if self.conn is not None:
+            self._db().save_user(self.conn, user)
+        return user
+
     def login(self, email: str, password: str) -> Tuple[User, Session]:
         """
         Check email and password, then start a new session.

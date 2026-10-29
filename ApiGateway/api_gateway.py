@@ -36,7 +36,11 @@ from seed_rooms import load_cmkl_rooms  # noqa: E402
 from seed_users import load_test_users  # noqa: E402
 # pylint: enable=wrong-import-position,wrong-import-order
 
-EQUIPMENT_KEYS = ("projector", "mic", "whiteboard", "tv_screen")
+EQUIPMENT_KEYS = ("projector", "mic", "whiteboard", "tv_screen", "computers")
+DEFAULT_DB_PATH = str(BASE_DIR / db.DEFAULT_DB_FILE)
+# Only the Vite dev server runs on a different origin; the desktop app and
+# the Vite proxy are same-origin and need no CORS at all.
+DEV_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173")
 
 # Which HTTP status each service error becomes. Flask picks the most
 # specific match, so subclasses are handled correctly.
@@ -68,8 +72,8 @@ class AppState:
     conn: sqlite3.Connection
 
 
-class RoomCapacityLookup:  # pylint: disable=too-few-public-methods
-    """Lets the Reservation Service ask for a room's capacity."""
+class RoomCapacityLookup:
+    """Lets the Reservation Service ask about a room's size and closures."""
 
     def __init__(self, rooms: Dict[str, rs.Room]) -> None:
         """
@@ -92,6 +96,25 @@ class RoomCapacityLookup:  # pylint: disable=too-few-public-methods
         """
         room = self.rooms.get(room_id)
         return room.capacity if room else None
+
+    def is_room_available(
+        self, room_id: str, start_date: date, end_date: date
+    ) -> bool:
+        """
+        Return True if the room exists and is not closed on any of the days.
+
+        Args:
+            room_id (str): Room id.
+            start_date (date): First day needed.
+            end_date (date): Last day needed (inclusive).
+
+        Returns:
+            bool: False if the room is unknown or closed in that range.
+        """
+        room = self.rooms.get(room_id)
+        return room is not None and rs.is_room_available(
+            room, start_date, end_date
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -725,7 +748,7 @@ def load_data(conn: sqlite3.Connection) -> AppState:
     )
 
 
-def create_app(db_path: str = str(BASE_DIR / db.DEFAULT_DB_FILE)) -> Flask:
+def create_app(db_path: str = DEFAULT_DB_PATH) -> Flask:
     """
     Build the Flask app.
 
@@ -740,11 +763,14 @@ def create_app(db_path: str = str(BASE_DIR / db.DEFAULT_DB_FILE)) -> Flask:
     db.init_db(conn)
 
     app = Flask(__name__)
-    CORS(app)
+    CORS(app, origins=list(DEV_ORIGINS))
     app.config["STATE"] = load_data(conn)
     app.register_blueprint(api)
     register_error_handlers(app)
 
+    # NOTE: desktop_app.py replaces this route by its function name
+    # (app.view_functions['root']). Do not rename root() without telling
+    # Micky; the plan is to move this health check to /api/health.
     @app.get("/")
     def root() -> Tuple[Response, int]:
         """Health check: lists every endpoint."""

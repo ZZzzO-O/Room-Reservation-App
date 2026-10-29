@@ -5,12 +5,7 @@
 """Sample Staff and Professor accounts for development and testing."""
 
 
-from auth_service import (
-    ROLE_PROFESSOR,
-    ROLE_STAFF,
-    AuthService,
-    hash_password,
-)
+from auth_service import ROLE_PROFESSOR, ROLE_STAFF, AuthService
 
 # Test-only passwords, listed in the Functional Test Plan. Real accounts are
 # created with AuthService.register() and never written in source code.
@@ -22,7 +17,9 @@ TEST_ACCOUNTS = [
 
 def load_test_users(auth: AuthService) -> AuthService:
     """
-    Register the test accounts that do not exist yet.
+    Create the test accounts, or reset them to their documented values.
+
+    Only the emails in TEST_ACCOUNTS are touched; real accounts never are.
 
     Args:
         auth (AuthService): Service to add the accounts to.
@@ -31,17 +28,10 @@ def load_test_users(auth: AuthService) -> AuthService:
         AuthService: The same service, now holding the test accounts.
     """
     for email, password, role, name in TEST_ACCOUNTS:
-        user = auth.users.get(email)
-        if user is None:
+        if email in auth.users:
+            # Reset to a known starting point on every server start, so
+            # each test run begins from the documented credentials.
+            auth.update_user(email, password, role, name)
+        else:
             auth.register(email, password, role, name)
-            continue
-
-        # The database may persist an older version of these public test
-        # accounts. Keep their documented credentials reliable on every
-        # development-server restart without creating duplicate users.
-        user.password_hash, user.salt = hash_password(password)
-        user.role = role
-        user.name = name
-        if auth.conn is not None:
-            auth._db().save_user(auth.conn, user)
     return auth
