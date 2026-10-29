@@ -55,6 +55,10 @@ class CapacityExceededError(ReservationError):
     """Raised when group size exceeds the room capacity."""
 
 
+class RoomUnavailableError(ReservationError):
+    """Raised when the room is closed (e.g. renovation) during the booking."""
+
+
 # Q8: flake8-bugbear flags this (B042): super() only gets
 # `message`, so copy/pickle can't rebuild the error. Heads-up: the obvious
 # fix super().__init__(message, conflicting_reservation) makes str(err) a
@@ -105,6 +109,21 @@ class RoomCapacityProvider(Protocol):  # pylint: disable=too-few-public-methods
 
         Returns:
             Optional[int]: Capacity, or None if the room is unknown.
+        """
+
+    def is_room_available(
+        self, room_id: str, start_date: date, end_date: date
+    ) -> bool:
+        """
+        Check that a room is not closed on any day in a date range.
+
+        Args:
+            room_id (str): Room identifier.
+            start_date (date): First day needed.
+            end_date (date): Last day needed (inclusive).
+
+        Returns:
+            bool: False if the room is unknown or closed in that range.
         """
 
 
@@ -225,6 +244,7 @@ class ReservationService:
         Raises:
             InvalidReservationError: If a field is invalid.
             RoomNotFoundError: If the room does not exist.
+            RoomUnavailableError: If the room is closed in that period.
             CapacityExceededError: If the group does not fit.
             ReservationConflictError: If the room is already booked.
         """
@@ -248,6 +268,7 @@ class ReservationService:
             ReservationNotFoundError: If the ID is not stored.
             InvalidReservationError: If a field is invalid.
             RoomNotFoundError: If the room does not exist.
+            RoomUnavailableError: If the room is closed in that period.
             CapacityExceededError: If the group does not fit.
             ReservationConflictError: If the room is already booked.
         """
@@ -414,19 +435,10 @@ class ReservationService:
         Raises:
             InvalidReservationError: If a field is invalid.
             RoomNotFoundError: If the room does not exist.
+            RoomUnavailableError: If the room is closed in that period.
             CapacityExceededError: If the group does not fit.
             ReservationConflictError: If the room is already booked.
         """
-# Q1: we check fields, capacity and clashes, but NEVER
-# whether the room is closed (renovation etc.). That's a Must Have, and
-# test plan 5.8 expects a rejection.
-# Fix idea: add is_room_available(room_id, start, end) to
-# RoomCapacityProvider (the room
-# service already has is_room_available()), call it here with
-# reservation.start_date and reservation.last_date, and raise a new
-# RoomUnavailableError. Needs Micky (room side) + Thiri (gateway adapter,
-# plus map the new error to an HTTP status).
-#
 # Q4: nothing stops a booking in 2030, or last year.
 # Test plan 5.11 expects "outside the semester" to be rejected.
 # Decide: add SEMESTER_START / SEMESTER_END and check here, or drop that test.
@@ -438,6 +450,16 @@ class ReservationService:
         if room_capacity is None:
             raise RoomNotFoundError(
                 f"Room '{reservation.room_id}' not found."
+            )
+        # Checked after the lookup above because an unknown room also
+        # reports "not available", and that case needs its own error
+        if not self._room_service.is_room_available(
+            reservation.room_id, reservation.start_date, reservation.last_date
+        ):
+            raise RoomUnavailableError(
+                f"Room '{reservation.room_id}' is unavailable between "
+                f"{reservation.start_date.isoformat()} and "
+                f"{reservation.last_date.isoformat()}."
             )
         if not is_room_big_enough(room_capacity, reservation.group_size):
             raise CapacityExceededError(

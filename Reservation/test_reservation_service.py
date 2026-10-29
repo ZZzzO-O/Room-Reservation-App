@@ -7,7 +7,7 @@
 import unittest
 from dataclasses import replace
 from datetime import date, time
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 
 try:
@@ -24,6 +24,7 @@ try:
         ReservationConflictError,
         ReservationService,
         RoomNotFoundError,
+        RoomUnavailableError,
         has_time_overlap,
     )
 except ImportError:
@@ -40,6 +41,7 @@ except ImportError:
         ReservationConflictError,
         ReservationService,
         RoomNotFoundError,
+        RoomUnavailableError,
         has_time_overlap,
     )
 
@@ -53,14 +55,21 @@ SEMESTER_END = date(2026, 12, 14)
 class FakeRoomService:  # pylint: disable=too-few-public-methods
     """Stand-in for the room service."""
 
-    def __init__(self, capacities: Dict[str, int]) -> None:
+    def __init__(
+        self,
+        capacities: Dict[str, int],
+        closures: Optional[Dict[str, Tuple[date, date]]] = None,
+    ) -> None:
         """
-        Store the fake room capacities.
+        Store the fake room capacities and closures.
 
         Args:
             capacities (Dict[str, int]): Room ID to capacity.
+            closures (Optional[Dict[str, Tuple[date, date]]]): Room ID to
+                its closed (first, last) days, both inclusive.
         """
         self._capacities = capacities
+        self._closures = closures or {}
 
     def get_room_capacity(self, room_id: str) -> Optional[int]:
         """
@@ -73,6 +82,27 @@ class FakeRoomService:  # pylint: disable=too-few-public-methods
             Optional[int]: Capacity, or None if the room is unknown.
         """
         return self._capacities.get(room_id)
+
+    def is_room_available(
+        self, room_id: str, start_date: date, end_date: date
+    ) -> bool:
+        """
+        Mimic the gateway: unknown or closed rooms are not available.
+
+        Args:
+            room_id (str): Room identifier.
+            start_date (date): First day needed.
+            end_date (date): Last day needed (inclusive).
+
+        Returns:
+            bool: False if the room is unknown or closed in that range.
+        """
+        if room_id not in self._capacities:
+            return False
+        closure = self._closures.get(room_id)
+        if closure is None:
+            return True
+        return not (start_date <= closure[1] and closure[0] <= end_date)
 
 
 def make_weekly(
@@ -132,7 +162,10 @@ class ReservationServiceTest(unittest.TestCase):
     def setUp(self) -> None:
         """Create a service with an empty repository."""
         self.repository = ReservationRepository()
-        rooms = FakeRoomService({"R1": 30, "R2": 10})
+        rooms = FakeRoomService(
+            {"R1": 30, "R2": 10, "R3": 40},
+            closures={"R3": (date(2026, 11, 9), date(2026, 11, 20))},
+        )
         self.service = ReservationService(self.repository, rooms)
 
     def test_create_assigns_id(self) -> None:
@@ -191,6 +224,39 @@ class ReservationServiceTest(unittest.TestCase):
         """A missing room raises RoomNotFoundError."""
         with self.assertRaises(RoomNotFoundError):
             self.service.create_reservation(make_weekly(room_id="R99"))
+
+    def test_closed_room_is_rejected(self) -> None:
+        """A one-off booking inside a closure raises RoomUnavailableError."""
+        with self.assertRaises(RoomUnavailableError):
+            self.service.create_reservation(
+                replace(make_once(date(2026, 11, 16)), room_id="R3")
+            )
+        self.assertEqual(self.service.get_all_reservations(), [])
+
+    def test_weekly_booking_running_into_closure_is_rejected(self) -> None:
+        """A weekly range that reaches a closure is rejected."""
+        with self.assertRaises(RoomUnavailableError):
+            self.service.create_reservation(make_weekly(room_id="R3"))
+
+    def test_booking_after_closure_is_allowed(self) -> None:
+        """A booking that starts after the closure ends is accepted."""
+        saved = self.service.create_reservation(
+            make_weekly(room_id="R3", start_date=date(2026, 11, 23))
+        )
+        self.assertIsNotNone(saved.reservation_id)
+
+    def test_closure_end_day_is_blocked(self) -> None:
+        """The last closed day still counts as closed (inclusive)."""
+        with self.assertRaises(RoomUnavailableError):
+            self.service.create_reservation(
+                replace(make_once(date(2026, 11, 20)), room_id="R3")
+            )
+
+    def test_edit_into_closure_is_rejected(self) -> None:
+        """Moving an existing booking into a closed room is rejected."""
+        saved = self.service.create_reservation(make_weekly())
+        with self.assertRaises(RoomUnavailableError):
+            self.service.edit_reservation(replace(saved, room_id="R3"))
 
     def test_invalid_fields_are_rejected(self) -> None:
         """Bad times, sizes, names, and dates are invalid."""
