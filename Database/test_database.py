@@ -95,9 +95,35 @@ class TestRoomPersistence(DatabaseTestCase):
         loaded = db.load_rooms(self.conn)
         self.assertEqual(len(loaded["601"].unavailable_periods), 1)
         p = loaded["601"].unavailable_periods[0]
+        self.assertIsNotNone(p.period_id)
         self.assertEqual(p.start_date, date(2026, 11, 2))
         self.assertEqual(p.end_date, date(2026, 11, 6))
         self.assertEqual(p.reason, "Renovation")
+
+    def test_update_and_delete_unavailable_period(self) -> None:
+        """Changes to closure periods are saved and removed by their id."""
+        room = Room("601", 40, name="Pioneer")
+        db.save_room(self.conn, room)
+        period = UnavailablePeriod(
+            start_date=date(2026, 11, 2),
+            end_date=date(2026, 11, 6),
+            reason="Renovation",
+        )
+        db.save_unavailable_period(self.conn, "601", period)
+        period.end_date = date(2026, 11, 3)
+        period.reason = "Finished early"
+        db.update_unavailable_period(self.conn, "601", period)
+
+        loaded = db.load_rooms(self.conn)
+        saved = loaded["601"].unavailable_periods[0]
+        self.assertEqual(saved.period_id, period.period_id)
+        self.assertEqual(saved.end_date, date(2026, 11, 3))
+        self.assertEqual(saved.reason, "Finished early")
+
+        db.delete_unavailable_period(self.conn, "601", period.period_id)
+        self.assertEqual(
+            db.load_rooms(self.conn)["601"].unavailable_periods, []
+        )
 
 
 class TestUserAndSessionPersistence(DatabaseTestCase):

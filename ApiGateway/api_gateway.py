@@ -51,8 +51,10 @@ ERROR_STATUS = {
     auth.InvalidSessionError: 401,
     rs.InvalidRoomError: 400,
     rs.RoomNotFoundError: 404,
+    rs.RoomHasReservationsError: 409,
     rs.DuplicateRoomError: 409,
     rs.RoomCapacityConflictError: 409,
+    rs.UnavailablePeriodNotFoundError: 404,
     rservice.InvalidReservationError: 400,
     rservice.CapacityExceededError: 400,
     rservice.RoomClosureConflictError: 409,
@@ -207,6 +209,7 @@ def room_to_dict(room: rs.Room) -> Dict[str, Any]:
         "equipment": room.equipment,
         "unavailable_periods": [
             {
+                "period_id": period.period_id,
                 "start_date": period.start_date.isoformat(),
                 "end_date": period.end_date.isoformat(),
                 "reason": period.reason,
@@ -545,7 +548,12 @@ def edit_room(room_id: str) -> Tuple[Response, int]:
 @staff_only
 def delete_room(room_id: str) -> Tuple[Response, int]:
     """Delete a room (Staff only)."""
-    rs.delete_room(state().rooms, room_id)
+    has_reservations = bool(state().reservations.get_by_room(room_id))
+    rs.delete_room(
+        state().rooms,
+        room_id,
+        has_reservations=has_reservations,
+    )
     save(db.delete_room, room_id)
     return jsonify({"message": f"Room {room_id} deleted."}), 200
 
@@ -570,6 +578,7 @@ def mark_unavailable(room_id: str) -> Tuple[Response, int]:
     return jsonify({
         "message": "Room marked unavailable.",
         "unavailable_period": {
+            "period_id": period.period_id,
             "start_date": period.start_date.isoformat(),
             "end_date": period.end_date.isoformat(),
             "reason": period.reason,
@@ -577,11 +586,77 @@ def mark_unavailable(room_id: str) -> Tuple[Response, int]:
     }), 201
 
 
+@api.put("/rooms/<room_id>/unavailable/<int:period_id>")
+@login_required
+@staff_only
+def update_unavailable(room_id: str, period_id: int) -> Tuple[Response, int]:
+    """Update a room closure period (Staff only)."""
+    data = body()
+    start_date = to_date(data.get("start_date", ""))
+    end_date = to_date(data.get("end_date", ""))
+    state().booking.validate_room_closure(
+        room_id, start_date, end_date
+    )
+    period = rs.update_unavailable_period(
+        state().rooms,
+        room_id,
+        period_id,
+        start_date,
+        end_date,
+        data.get("reason", ""),
+    )
+    save(db.update_unavailable_period, room_id, period)
+    return jsonify({
+        "message": "Room closure updated.",
+        "unavailable_period": {
+            "period_id": period.period_id,
+            "start_date": period.start_date.isoformat(),
+            "end_date": period.end_date.isoformat(),
+            "reason": period.reason,
+        },
+    }), 200
+
+
+@api.delete("/rooms/<room_id>/unavailable/<int:period_id>")
+@login_required
+@staff_only
+def delete_unavailable(room_id: str, period_id: int) -> Tuple[Response, int]:
+    """Remove a room closure period (Staff only)."""
+    rs.remove_unavailable_period(state().rooms, room_id, period_id)
+    save(db.delete_unavailable_period, room_id, period_id)
+    return jsonify({"message": "Room closure removed."}), 200
+
+
 @api.get("/rooms/available")
 @login_required
 def available_rooms() -> Tuple[Response, int]:
-    """List rooms that fit the group, have the equipment, and are open."""
-    rooms = rs.find_available_rooms(state().rooms, *search_args())
+    """List rooms that fit and have no closure or booking conflict."""
+    args = request.args
+    start_time_text = args.get("start_time")
+    end_time_text = args.get("end_time")
+    if bool(start_time_text) != bool(end_time_text):
+        raise ValueError("Both start_time and end_time are required.")
+
+    group_size, start_date, end_date, equipment = search_args()
+    rooms = rs.find_available_rooms(
+        state().rooms, group_size, start_date, end_date, equipment
+    )
+    if start_time_text and end_time_text:
+        start_time = to_time(start_time_text)
+        end_time = to_time(end_time_text)
+        if start_time >= end_time:
+            raise ValueError("End time must be strictly after start time.")
+        rooms = [
+            room
+            for room in rooms
+            if not state().booking.has_booking_conflict(
+                room.room_id,
+                start_date,
+                end_date,
+                start_time,
+                end_time,
+            )
+        ]
     return jsonify({
         "rooms": [room_to_dict(room) for room in rooms],
         "total": len(rooms),

@@ -10,8 +10,15 @@ import RoomCard from '../components/RoomCard';
 import RoomModal from '../components/RoomModal';
 import UnavailabilityModal from '../components/UnavailabilityModal';
 import ModalShell from '../components/ModalShell';
-import { deleteRoom } from '../api/roomApi';
-import { INPUT, BTN_PRIMARY, BTN_SECONDARY, BTN_DANGER, ERROR_BOX } from '../utils/styles';
+import { deleteRoom, searchAvailableRooms } from '../api/roomApi';
+import {
+  LABEL,
+  INPUT,
+  BTN_PRIMARY,
+  BTN_SECONDARY,
+  BTN_DANGER,
+  ERROR_BOX,
+} from '../utils/styles';
 
 const CATEGORY_TABS = [
   { key: 'ALL', label: 'All' },
@@ -71,6 +78,20 @@ export default function BrowsePage({
   const [needsProjector, setNeedsProjector] = useState(false);
   const [needsWhiteboard, setNeedsWhiteboard] = useState(false);
   const [needsComputers, setNeedsComputers] = useState(false);
+  const [availabilityDate, setAvailabilityDate] = useState(() => {
+    const now = new Date();
+    return [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      String(now.getDate()).padStart(2, '0'),
+    ].join('-');
+  });
+  const [availabilityStartTime, setAvailabilityStartTime] = useState('10:00');
+  const [availabilityEndTime, setAvailabilityEndTime] = useState('12:00');
+  const [availabilityGroupSize, setAvailabilityGroupSize] = useState('');
+  const [availabilityRooms, setAvailabilityRooms] = useState(null);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState('');
 
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [roomToEdit, setRoomToEdit] = useState(null);
@@ -79,6 +100,17 @@ export default function BrowsePage({
   const [deleteError, setDeleteError] = useState('');
 
   const isStaff = currentUser?.role === 'Staff';
+  const availableRoomIds = useMemo(
+    () =>
+      availabilityRooms === null
+        ? null
+        : new Set(
+            availabilityRooms.map((availableRoom) =>
+              String(availableRoom.room_id || availableRoom.id)
+            )
+          ),
+    [availabilityRooms]
+  );
 
   /**
    * Filter rooms by room number/ID, name, category, capacity, and equipment.
@@ -105,6 +137,9 @@ export default function BrowsePage({
         const matchesProjector = !needsProjector || room.hasProjector;
         const matchesWhiteboard = !needsWhiteboard || room.hasWhiteboard;
         const matchesComputers = !needsComputers || room.hasComputers;
+        const matchesAvailability =
+          availableRoomIds === null ||
+          availableRoomIds.has(String(room.room_id || room.id));
 
         return (
           matchesSearch &&
@@ -112,7 +147,8 @@ export default function BrowsePage({
           matchesCapacity &&
           matchesProjector &&
           matchesWhiteboard &&
-          matchesComputers
+          matchesComputers &&
+          matchesAvailability
         );
       })
       .sort((a, b) => {
@@ -131,6 +167,7 @@ export default function BrowsePage({
     needsProjector,
     needsWhiteboard,
     needsComputers,
+    availableRoomIds,
   ]);
 
   const handleOpenAddRoom = () => {
@@ -147,11 +184,51 @@ export default function BrowsePage({
     setUnavailRoom(room);
   };
 
+  const handleAvailabilitySearch = async (event) => {
+    event.preventDefault();
+    setAvailabilityError('');
+
+    const groupSize = Number(availabilityGroupSize);
+    if (!Number.isInteger(groupSize) || groupSize < 1) {
+      setAvailabilityError('Enter a group size of at least 1.');
+      return;
+    }
+    if (availabilityStartTime >= availabilityEndTime) {
+      setAvailabilityError('End time must be after start time.');
+      return;
+    }
+
+    setAvailabilityLoading(true);
+    try {
+      const available = await searchAvailableRooms({
+        group_size: groupSize,
+        start_date: availabilityDate,
+        end_date: availabilityDate,
+        start_time: availabilityStartTime,
+        end_time: availabilityEndTime,
+      });
+      setAvailabilityRooms(available);
+    } catch (err) {
+      setAvailabilityError(err.message || 'Failed to search room availability.');
+    } finally {
+      setAvailabilityLoading(false);
+    }
+  };
+
+  const clearAvailabilitySearch = () => {
+    setAvailabilityRooms(null);
+    setAvailabilityError('');
+    setAvailabilityGroupSize('');
+  };
+
   const handleConfirmDeleteRoom = async () => {
     if (!deleteTargetRoom) return;
     setDeleteError('');
     try {
-      await deleteRoom(deleteTargetRoom.room_id || deleteTargetRoom.id);
+      await deleteRoom(
+        deleteTargetRoom.room_id || deleteTargetRoom.id,
+        reservations
+      );
       setDeleteTargetRoom(null);
       onRefreshRooms();
     } catch (err) {
@@ -191,6 +268,89 @@ export default function BrowsePage({
           </button>
         )}
       </header>
+
+      <form
+        onSubmit={handleAvailabilitySearch}
+        className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700 space-y-3"
+        aria-label="Find available rooms"
+      >
+        <div>
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
+            Find available rooms
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Search one date and time slot. Rooms with overlapping bookings or renovation closures are excluded. Weekly bookings are checked for conflicts when saved.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
+          <div>
+            <label htmlFor="availability-date" className={LABEL}>Date</label>
+            <input
+              id="availability-date"
+              type="date"
+              required
+              value={availabilityDate}
+              onChange={(event) => setAvailabilityDate(event.target.value)}
+              className={INPUT}
+            />
+          </div>
+          <div>
+            <label htmlFor="availability-start-time" className={LABEL}>From</label>
+            <input
+              id="availability-start-time"
+              type="time"
+              required
+              value={availabilityStartTime}
+              onChange={(event) => setAvailabilityStartTime(event.target.value)}
+              className={INPUT}
+            />
+          </div>
+          <div>
+            <label htmlFor="availability-end-time" className={LABEL}>To</label>
+            <input
+              id="availability-end-time"
+              type="time"
+              required
+              value={availabilityEndTime}
+              onChange={(event) => setAvailabilityEndTime(event.target.value)}
+              className={INPUT}
+            />
+          </div>
+          <div>
+            <label htmlFor="availability-group-size" className={LABEL}>Students</label>
+            <input
+              id="availability-group-size"
+              type="number"
+              required
+              min="1"
+              value={availabilityGroupSize}
+              onChange={(event) => setAvailabilityGroupSize(event.target.value)}
+              placeholder="Group size"
+              className={INPUT}
+            />
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" disabled={availabilityLoading} className={BTN_PRIMARY}>
+              {availabilityLoading ? 'Searching…' : 'Find rooms'}
+            </button>
+            {availabilityRooms !== null && (
+              <button
+                type="button"
+                onClick={clearAvailabilitySearch}
+                className={BTN_SECONDARY}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+        {availabilityError && <div className={ERROR_BOX}>{availabilityError}</div>}
+        {availabilityRooms !== null && !availabilityError && (
+          <p role="status" className="text-sm text-slate-600 dark:text-slate-300">
+            Found {availabilityRooms.length} available room{availabilityRooms.length === 1 ? '' : 's'} for this time slot.
+          </p>
+        )}
+      </form>
 
       <section
         aria-label="Filters"

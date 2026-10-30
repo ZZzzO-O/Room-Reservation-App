@@ -17,14 +17,8 @@ import {
   logoutUser,
   getStoredUser,
 } from './api/authApi';
-import {
-  fetchRooms,
-  resetRoomsToSeed,
-} from './api/roomApi';
-import {
-  fetchReservations,
-  resetReservationsToSeed,
-} from './api/reservationApi';
+import { fetchRooms } from './api/roomApi';
+import { fetchReservations } from './api/reservationApi';
 
 /**
  * Root component of the Classroom Reservation Application.
@@ -71,13 +65,6 @@ export default function App() {
     setCurrentUser(null);
   };
 
-  // Restores the local fallback store; the backend keeps its own data
-  const handleResetSeedData = async () => {
-    resetRoomsToSeed();
-    resetReservationsToSeed();
-    await reloadData();
-  };
-
   const handleBookClick = (room) => {
     if (!room.isAvailable) return;
     setSelectedRoomForBooking(room);
@@ -94,7 +81,6 @@ export default function App() {
           currentUser={currentUser}
           onOpenLogin={() => setIsLoginModalOpen(true)}
           onLogout={handleLogout}
-          onResetSeed={handleResetSeedData}
         />
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

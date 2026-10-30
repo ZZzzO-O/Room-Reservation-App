@@ -9,6 +9,7 @@ try:
         delete_reservation,
         delete_room,
         delete_session,
+        delete_unavailable_period,
         get_connection,
         init_db,
         load_reservations,
@@ -19,6 +20,7 @@ try:
         save_room,
         save_session,
         save_unavailable_period,
+        update_unavailable_period,
         save_user,
     )
 except ImportError:

@@ -141,7 +141,10 @@ export function isNonClassroomFacility(roomId, roomName = '') {
 export function normalizeRoom(raw) {
   const roomId = String(raw.room_id || raw.id || '');
   const equipment = raw.equipment || {};
-  const periods = raw.unavailable_periods || [];
+  const periods = (raw.unavailable_periods || []).map((period, index) => ({
+    ...period,
+    period_id: period.period_id ?? -(index + 1),
+  }));
 
   // Check if room is currently closed today
   const today = new Date().toISOString().split('T')[0];
@@ -268,6 +271,38 @@ export async function fetchRooms() {
 }
 
 /**
+ * Search for rooms available for a requested date and time slot.
+ * @param {Object} criteria - Group size, dates, and meeting times.
+ * @returns {Promise<Object[]>} Matching normalized rooms.
+ */
+export async function searchAvailableRooms(criteria) {
+  const params = new URLSearchParams({
+    group_size: String(criteria.group_size),
+    start_date: criteria.start_date,
+    end_date: criteria.end_date,
+    start_time: criteria.start_time,
+    end_time: criteria.end_time,
+  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}/rooms/available?${params}`, {
+      headers: getAuthHeaders(),
+    });
+  } catch {
+    throw new Error('Cannot search availability: the server is unreachable.');
+  }
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to search room availability.');
+  }
+  const rooms = (data.rooms || []).filter(
+    (room) => !isNonClassroomFacility(room.room_id || room.id, room.name)
+  );
+  return sortRoomsByNumber(rooms.map(normalizeRoom));
+}
+
+/**
  * Create a new room (Staff privilege).
  * @param {Object} roomData - Room creation payload.
  * @returns {Promise<Object>} Created room object.
@@ -277,15 +312,23 @@ export async function createRoom(roomData) {
   if (isNaN(cap) || cap < 1) {
     throw new Error('Room capacity must be at least 1.');
   }
+  if (!roomData.room_id || !roomData.room_id.trim()) {
+    throw new Error('Room ID is required.');
+  }
   if (!roomData.name || !roomData.name.trim()) {
     throw new Error('Room name is required.');
   }
+
+  const normalizedRoomData = {
+    ...roomData,
+    room_id: roomData.room_id.trim(),
+  };
 
   try {
     const response = await fetch(`${API_BASE_URL}/rooms`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify(roomData),
+      body: JSON.stringify(normalizedRoomData),
     });
     const data = await response.json();
     if (!response.ok) {
@@ -298,11 +341,14 @@ export async function createRoom(roomData) {
     }
     // Local fallback creation
     const current = getLocalRooms();
+    if (current.some((r) => r.room_id === normalizedRoomData.room_id)) {
+      throw new Error(`Room ID '${normalizedRoomData.room_id}' already exists.`);
+    }
     if (current.some((r) => r.name.toLowerCase() === roomData.name.trim().toLowerCase())) {
       throw new Error(`Room with name '${roomData.name}' already exists.`);
     }
     const newRoom = {
-      room_id: roomData.room_id || String(Date.now()).slice(-4),
+      room_id: normalizedRoomData.room_id,
       name: roomData.name.trim(),
       room_type: roomData.room_type || 'Classroom',
       capacity: cap,
@@ -351,9 +397,10 @@ export async function editRoom(roomId, roomData) {
 /**
  * Delete a room from the system (Staff privilege).
  * @param {string} roomId - Identifier of room to delete.
+ * @param {Object[]} reservations - Loaded reservations used by offline mode.
  * @returns {Promise<void>}
  */
-export async function deleteRoom(roomId) {
+export async function deleteRoom(roomId, reservations = []) {
   try {
     const response = await fetch(`${API_BASE_URL}/rooms/${roomId}`, {
       method: 'DELETE',
@@ -366,6 +413,15 @@ export async function deleteRoom(roomId) {
   } catch (err) {
     if (err.message && !err.message.includes('fetch')) {
       throw err;
+    }
+    if (
+      reservations.some(
+        (reservation) => String(reservation.room_id) === String(roomId)
+      )
+    ) {
+      throw new Error(
+        `Room ${roomId} cannot be deleted because it has reservations.`
+      );
     }
     const current = getLocalRooms().filter((r) => r.room_id !== roomId);
     saveLocalRooms(current);
@@ -409,9 +465,83 @@ export async function markRoomUnavailable(roomId, payload) {
 }
 
 /**
- * Reset the local room store back to the seed rooms.
+ * Update an existing room closure period.
+ * @param {string} roomId - Identifier of the room.
+ * @param {number} periodId - Identifier of the closure period.
+ * @param {Object} payload - Updated closure details.
+ * @returns {Promise<Object>} Updated closure period.
  */
-export function resetRoomsToSeed() {
-  localStorage.setItem(ROOMS_STORAGE_KEY, JSON.stringify(SEED_ROOMS));
-  return SEED_ROOMS.map(normalizeRoom);
+export async function updateRoomUnavailable(roomId, periodId, payload) {
+  if (payload.start_date > payload.end_date) {
+    throw new Error('End date cannot be before start date.');
+  }
+
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/rooms/${roomId}/unavailable/${periodId}`,
+      {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload),
+      }
+    );
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to update room closure.');
+    }
+    return data.unavailable_period;
+  } catch (err) {
+    if (err.message && !err.message.includes('fetch')) {
+      throw err;
+    }
+    const current = getLocalRooms();
+    const room = current.find((item) => item.room_id === roomId);
+    const period = room?.unavailable_periods.find(
+      (item) => item.period_id === periodId
+    );
+    if (!period) {
+      throw new Error(`Room closure '${periodId}' not found.`);
+    }
+    Object.assign(period, payload);
+    saveLocalRooms(current);
+    return period;
+  }
+}
+
+/**
+ * Remove an existing room closure period.
+ * @param {string} roomId - Identifier of the room.
+ * @param {number} periodId - Identifier of the closure period.
+ * @returns {Promise<void>}
+ */
+export async function removeRoomUnavailable(roomId, periodId) {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/rooms/${roomId}/unavailable/${periodId}`,
+      {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      }
+    );
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to remove room closure.');
+    }
+  } catch (err) {
+    if (err.message && !err.message.includes('fetch')) {
+      throw err;
+    }
+    const current = getLocalRooms();
+    const room = current.find((item) => item.room_id === roomId);
+    if (!room) {
+      throw new Error(`Room '${roomId}' not found.`);
+    }
+    const periods = room.unavailable_periods || [];
+    const remaining = periods.filter((period) => period.period_id !== periodId);
+    if (remaining.length === periods.length) {
+      throw new Error(`Room closure '${periodId}' not found.`);
+    }
+    room.unavailable_periods = remaining;
+    saveLocalRooms(current);
+  }
 }

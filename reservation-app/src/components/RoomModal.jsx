@@ -40,6 +40,7 @@ export default function RoomModal({
       )
     : 0;
 
+  const [roomIdInput, setRoomIdInput] = useState('');
   const [name, setName] = useState(room ? room.name : '');
   const [roomType, setRoomType] = useState(room ? room.room_type || 'Classroom' : 'Classroom');
   const [capacity, setCapacity] = useState(room ? String(room.capacity) : '');
@@ -81,6 +82,10 @@ export default function RoomModal({
       setErrorMessage('Room name is required.');
       return;
     }
+    if (!isEditing && !roomIdInput.trim()) {
+      setErrorMessage('Room ID is required.');
+      return;
+    }
 
     const equipment = {};
     if (projector > 0) equipment.projector = projector;
@@ -100,6 +105,7 @@ export default function RoomModal({
         });
       } else {
         await createRoom({
+          room_id: roomIdInput.trim(),
           name: name.trim(),
           room_type: roomType,
           capacity: capNum,
@@ -133,6 +139,22 @@ export default function RoomModal({
         {errorMessage && <div className={ERROR_BOX}>{errorMessage}</div>}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {!isEditing && (
+            <div>
+              <label htmlFor="room-modal-id" className={LABEL}>
+                Room ID
+              </label>
+              <input
+                id="room-modal-id"
+                type="text"
+                required
+                value={roomIdInput}
+                onChange={(e) => setRoomIdInput(e.target.value)}
+                placeholder="e.g. 610"
+                className={INPUT}
+              />
+            </div>
+          )}
           <div>
             <label htmlFor="room-modal-name" className={LABEL}>
               Name

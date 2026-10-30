@@ -166,7 +166,7 @@ def save_unavailable_period(
         None
     """
     with conn:
-        conn.execute(
+        cursor = conn.execute(
             """
             INSERT INTO unavailable_periods
             (room_id, start_date, end_date, reason)
@@ -179,6 +179,49 @@ def save_unavailable_period(
                 period.reason,
             ),
         )
+        period.period_id = cursor.lastrowid
+
+
+def update_unavailable_period(
+    conn: sqlite3.Connection, room_id: str, period: UnavailablePeriod
+) -> None:
+    """Persist changes to an existing unavailable period."""
+    with conn:
+        cursor = conn.execute(
+            """
+            UPDATE unavailable_periods
+            SET start_date = ?, end_date = ?, reason = ?
+            WHERE room_id = ? AND id = ?;
+            """,
+            (
+                period.start_date.isoformat(),
+                period.end_date.isoformat(),
+                period.reason,
+                room_id,
+                period.period_id,
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise ValueError(
+                f"Unavailable period {period.period_id} does not exist "
+                f"for room {room_id}."
+            )
+
+
+def delete_unavailable_period(
+    conn: sqlite3.Connection, room_id: str, period_id: int
+) -> None:
+    """Delete an unavailable period from SQLite."""
+    with conn:
+        cursor = conn.execute(
+            "DELETE FROM unavailable_periods WHERE room_id = ? AND id = ?;",
+            (room_id, period_id),
+        )
+        if cursor.rowcount != 1:
+            raise ValueError(
+                f"Unavailable period {period_id} does not exist "
+                f"for room {room_id}."
+            )
 
 
 def load_rooms(conn: sqlite3.Connection) -> Dict[str, Room]:
@@ -207,7 +250,7 @@ def load_rooms(conn: sqlite3.Connection) -> Dict[str, Room]:
 
     period_rows = conn.execute(
         """
-        SELECT room_id, start_date, end_date, reason
+        SELECT id, room_id, start_date, end_date, reason
         FROM unavailable_periods;
         """
     ).fetchall()
@@ -218,6 +261,7 @@ def load_rooms(conn: sqlite3.Connection) -> Dict[str, Room]:
                 start_date=date.fromisoformat(prow["start_date"]),
                 end_date=date.fromisoformat(prow["end_date"]),
                 reason=prow["reason"],
+                period_id=prow["id"],
             )
             rooms[rid].unavailable_periods.append(p)
 

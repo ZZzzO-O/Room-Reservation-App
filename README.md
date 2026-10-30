@@ -19,7 +19,7 @@ don't fit.
 
 ### What it does
 - **Sign-in with roles**: Staff and Professor accounts; only Staff can change rooms.
-- **Rooms**: add, edit and delete rooms with capacity and equipment counts; capacity cannot be reduced below an existing reservation's group size.
+- **Rooms**: add, edit and delete rooms with capacity and equipment counts; rooms with reservations cannot be deleted, and capacity cannot be reduced below an existing reservation's group size.
 - **Closures**: close a room for a date range with a reason (e.g. renovation).
 - **Search**: filter rooms by group size, required equipment and dates.
 - **Recommendation**: suggests the smallest room that fits the group.

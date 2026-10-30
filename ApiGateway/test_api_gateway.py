@@ -173,6 +173,26 @@ class TestRoomRoutes(GatewayTestCase):
         res = self.client.get("/api/rooms/606", headers=self.staff)
         self.assertEqual(res.status_code, 404)
 
+    def test_delete_room_with_reservation_is_rejected(self) -> None:
+        """A room and its reservation remain when deletion is attempted."""
+        booking = self.book()
+        self.assertEqual(booking.status_code, 201)
+        reservation_id = booking.get_json()["reservation"]["reservation_id"]
+
+        deleted = self.client.delete("/api/rooms/601", headers=self.staff)
+
+        self.assertEqual(deleted.status_code, 409)
+        self.assertIn("has reservations", deleted.get_json()["error"])
+        room = self.client.get("/api/rooms/601", headers=self.staff)
+        self.assertEqual(room.status_code, 200)
+        reservations = self.client.get(
+            "/api/reservations?room_id=601", headers=self.staff
+        ).get_json()["reservations"]
+        self.assertEqual(
+            [reservation["reservation_id"] for reservation in reservations],
+            [reservation_id],
+        )
+
     def test_capacity_cannot_be_lowered_below_existing_reservation(self) -> None:
         """Reject a capacity reduction that would invalidate a booking."""
         booked = self.book(group_size=35)
@@ -253,6 +273,118 @@ class TestRoomRoutes(GatewayTestCase):
         ).get_json()["room"]
         self.assertEqual(room["unavailable_periods"], [])
 
+    def test_staff_can_edit_and_remove_unavailable_period(self) -> None:
+        """Staff can shorten a closure and remove it when work finishes."""
+        created = self.client.post(
+            "/api/rooms/601/unavailable",
+            headers=self.staff,
+            json={
+                "start_date": "2027-01-05",
+                "end_date": "2027-01-20",
+                "reason": "Renovation",
+            },
+        )
+        self.assertEqual(created.status_code, 201)
+        period = created.get_json()["unavailable_period"]
+        period_id = period["period_id"]
+
+        updated = self.client.put(
+            f"/api/rooms/601/unavailable/{period_id}",
+            headers=self.staff,
+            json={
+                "start_date": "2027-01-05",
+                "end_date": "2027-01-10",
+                "reason": "Renovation finishing early",
+            },
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(
+            updated.get_json()["unavailable_period"]["end_date"], "2027-01-10"
+        )
+
+        room = self.client.get(
+            "/api/rooms/601", headers=self.staff
+        ).get_json()["room"]
+        self.assertEqual(
+            room["unavailable_periods"][0]["period_id"], period_id
+        )
+
+        removed = self.client.delete(
+            f"/api/rooms/601/unavailable/{period_id}", headers=self.staff
+        )
+        self.assertEqual(removed.status_code, 200)
+        room = self.client.get(
+            "/api/rooms/601", headers=self.staff
+        ).get_json()["room"]
+        self.assertEqual(room["unavailable_periods"], [])
+
+    def test_professor_cannot_edit_or_remove_unavailable_period(self) -> None:
+        """Closure management remains restricted to Staff."""
+        created = self.client.post(
+            "/api/rooms/601/unavailable",
+            headers=self.staff,
+            json={
+                "start_date": "2027-01-05",
+                "end_date": "2027-01-20",
+                "reason": "Renovation",
+            },
+        )
+        period_id = created.get_json()["unavailable_period"]["period_id"]
+
+        for response in (
+            self.client.put(
+                f"/api/rooms/601/unavailable/{period_id}",
+                headers=self.prof,
+                json={
+                    "start_date": "2027-01-05",
+                    "end_date": "2027-01-10",
+                    "reason": "Renovation",
+                },
+            ),
+            self.client.delete(
+                f"/api/rooms/601/unavailable/{period_id}", headers=self.prof
+            ),
+        ):
+            self.assertEqual(response.status_code, 403)
+
+    def test_editing_closure_cannot_conflict_with_existing_booking(
+        self,
+    ) -> None:
+        """A conflicting extension is rejected without changing the closure."""
+        booking = self.book(
+            start_date="2027-01-08",
+            end_date=None,
+            repetition="Once",
+        )
+        self.assertEqual(booking.status_code, 201)
+        created = self.client.post(
+            "/api/rooms/601/unavailable",
+            headers=self.staff,
+            json={
+                "start_date": "2027-01-05",
+                "end_date": "2027-01-06",
+                "reason": "Renovation",
+            },
+        )
+        period_id = created.get_json()["unavailable_period"]["period_id"]
+
+        updated = self.client.put(
+            f"/api/rooms/601/unavailable/{period_id}",
+            headers=self.staff,
+            json={
+                "start_date": "2027-01-05",
+                "end_date": "2027-01-10",
+                "reason": "Renovation",
+            },
+        )
+        self.assertEqual(updated.status_code, 409)
+        room = self.client.get(
+            "/api/rooms/601", headers=self.staff
+        ).get_json()["room"]
+        self.assertEqual(
+            room["unavailable_periods"][0]["end_date"], "2027-01-06"
+        )
+
     def test_available_and_recommend(self) -> None:
         """Search only returns rooms that fit; recommend picks smallest."""
         query = "?group_size=55&start_date=2026-10-14&end_date=2026-10-14"
@@ -263,6 +395,57 @@ class TestRoomRoutes(GatewayTestCase):
         res = self.client.get("/api/rooms/recommend" + query,
                               headers=self.staff)
         self.assertEqual(res.get_json()["recommended_room"]["room_id"], "608")
+
+    def test_available_search_excludes_booked_time_but_allows_other_slots(
+        self,
+    ) -> None:
+        """Room search checks time conflicts, with back-to-back slots allowed."""
+        booking = self.book(
+            start_date="2026-11-05",
+            end_date=None,
+            repetition="Once",
+            start_time="10:00",
+            end_time="12:00",
+        )
+        self.assertEqual(booking.status_code, 201)
+        base_query = (
+            "?group_size=30&start_date=2026-11-05&end_date=2026-11-05"
+        )
+
+        overlapping = self.client.get(
+            "/api/rooms/available"
+            + base_query
+            + "&start_time=11:00&end_time=13:00",
+            headers=self.staff,
+        )
+        overlapping_ids = [
+            room["room_id"] for room in overlapping.get_json()["rooms"]
+        ]
+        self.assertNotIn("601", overlapping_ids)
+
+        back_to_back = self.client.get(
+            "/api/rooms/available"
+            + base_query
+            + "&start_time=12:00&end_time=14:00",
+            headers=self.staff,
+        )
+        back_to_back_ids = [
+            room["room_id"] for room in back_to_back.get_json()["rooms"]
+        ]
+        self.assertIn("601", back_to_back_ids)
+
+    def test_available_search_rejects_invalid_time_range(self) -> None:
+        """Room search rejects an end time that is not after the start."""
+        response = self.client.get(
+            "/api/rooms/available"
+            "?group_size=30&start_date=2026-11-05&end_date=2026-11-05"
+            "&start_time=12:00&end_time=10:00",
+            headers=self.staff,
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(
+            "End time must be strictly after", response.get_json()["error"]
+        )
 
 
 class TestReservationRoutes(GatewayTestCase):

@@ -22,7 +22,6 @@ const NAV_ITEMS = [
  * @param {Object|null} props.currentUser - Authenticated user profile.
  * @param {function} props.onOpenLogin - Handler to open login modal.
  * @param {function} props.onLogout - Handler to sign out.
- * @param {function} props.onResetSeed - Handler to reset local data to the test plan seed.
  * @returns {JSX.Element} The NavBar component.
  */
 export default function NavBar({
@@ -33,7 +32,6 @@ export default function NavBar({
   currentUser,
   onOpenLogin,
   onLogout,
-  onResetSeed,
 }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -78,15 +76,6 @@ export default function NavBar({
           </div>
 
           <div className="hidden md:flex items-center gap-1 text-sm">
-            <button
-              id="btn-reset-seed"
-              onClick={onResetSeed}
-              title="Restore the rooms and reservations from the test plan"
-              className="px-3 py-2 rounded-md text-xs text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-            >
-              Reset demo data
-            </button>
-
             <button
               id="toggle-dark-mode"
               onClick={toggleDarkMode}
@@ -163,12 +152,6 @@ export default function NavBar({
             </button>
           ))}
           <div className="pt-1 mt-1 border-t border-slate-800">
-            <button
-              onClick={runAndClose(onResetSeed)}
-              className="block w-full text-left px-3 py-2.5 rounded-md text-xs text-slate-400 hover:bg-slate-800"
-            >
-              Reset demo data
-            </button>
             {currentUser ? (
               <button
                 onClick={runAndClose(onLogout)}

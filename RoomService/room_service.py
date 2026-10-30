@@ -28,8 +28,16 @@ class RoomNotFoundError(RoomError):
     """Raised when a room id does not exist."""
 
 
+class RoomHasReservationsError(RoomError):
+    """Raised when reservations block room deletion."""
+
+
 class RoomCapacityConflictError(RoomError):
-    """Raised when a capacity change would invalidate an existing reservation."""
+    """Raised when a capacity change invalidates an existing reservation."""
+
+
+class UnavailablePeriodNotFoundError(RoomError):
+    """Raised when a closure period does not exist."""
 
 
 @dataclass(slots=True)
@@ -39,6 +47,7 @@ class UnavailablePeriod:
     start_date: date
     end_date: date
     reason: str = ""
+    period_id: Optional[int] = None
 
 
 @dataclass(slots=True)
@@ -195,19 +204,29 @@ def edit_room(
     return room
 
 
-def delete_room(rooms: Dict[str, Room], room_id: str) -> None:
+def delete_room(
+    rooms: Dict[str, Room],
+    room_id: str,
+    has_reservations: bool = False,
+) -> None:
     """
     Args:
         rooms (Dict[str, Room]): Room data keyed by room id.
         room_id (str): Id of the room to delete.
+        has_reservations (bool): Whether the room has saved reservations.
 
     Returns:
         None
 
     Raises:
         RoomNotFoundError: If the room does not exist.
+        RoomHasReservationsError: If the room has reservations.
     """
     get_room(rooms, room_id)
+    if has_reservations:
+        raise RoomHasReservationsError(
+            f"Room {room_id} cannot be deleted because it has reservations."
+        )
     del rooms[room_id]
 
 
@@ -239,6 +258,51 @@ def mark_room_unavailable(
     period = UnavailablePeriod(start_date, end_date, reason)
     room.unavailable_periods.append(period)
     return period
+
+
+def update_unavailable_period(
+    rooms: Dict[str, Room],
+    room_id: str,
+    period_id: int,
+    start_date: date,
+    end_date: date,
+    reason: str = "",
+) -> UnavailablePeriod:
+    """Update an existing room closure period."""
+    room = get_room(rooms, room_id)
+    if end_date < start_date:
+        raise InvalidRoomError("End date must not be before start date.")
+    period = next(
+        (
+            item
+            for item in room.unavailable_periods
+            if item.period_id == period_id
+        ),
+        None,
+    )
+    if period is None:
+        raise UnavailablePeriodNotFoundError(
+            f"Unavailable period {period_id} does not exist "
+            f"for room {room_id}."
+        )
+    period.start_date = start_date
+    period.end_date = end_date
+    period.reason = reason
+    return period
+
+
+def remove_unavailable_period(
+    rooms: Dict[str, Room], room_id: str, period_id: int
+) -> UnavailablePeriod:
+    """Remove an existing room closure period."""
+    room = get_room(rooms, room_id)
+    for index, period in enumerate(room.unavailable_periods):
+        if period.period_id == period_id:
+            return room.unavailable_periods.pop(index)
+    raise UnavailablePeriodNotFoundError(
+        f"Unavailable period {period_id} does not exist "
+        f"for room {room_id}."
+    )
 
 
 def is_room_available(room: Room, start_date: date, end_date: date) -> bool:

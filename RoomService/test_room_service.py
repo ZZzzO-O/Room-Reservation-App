@@ -182,6 +182,13 @@ class TestDeleteRoom(RoomTestCase):
         with self.assertRaises(rs.RoomNotFoundError):
             rs.delete_room(self.rooms, "A101")
 
+    def test_delete_room_with_reservations_is_rejected(self) -> None:
+        """Check: a room with reservations is left unchanged."""
+        room = rs.create_room(self.rooms, "A101", 40)
+        with self.assertRaises(rs.RoomHasReservationsError):
+            rs.delete_room(self.rooms, "A101", has_reservations=True)
+        self.assertIs(self.rooms["A101"], room)
+
     def test_delete_twice_raises_second_time(self) -> None:
         """Check: delete twice raises second time."""
         rs.create_room(self.rooms, "A101", 40)
@@ -249,6 +256,46 @@ class TestMarkUnavailable(RoomTestCase):
         with self.assertRaises(rs.InvalidRoomError):
             rs.mark_room_unavailable(
                 self.rooms, "A101", date(2026, 12, 2), date(2026, 12, 1))
+
+    def test_existing_closure_can_be_shortened_or_removed(self) -> None:
+        """A staff correction can shorten a closure or remove it entirely."""
+        self.room.unavailable_periods[0].period_id = 12
+
+        updated = rs.update_unavailable_period(
+            self.rooms,
+            "A101",
+            12,
+            date(2026, 10, 10),
+            date(2026, 10, 12),
+            "Renovation finished early",
+        )
+        self.assertEqual(updated.end_date, date(2026, 10, 12))
+        self.assertTrue(
+            rs.is_room_available(
+                self.room, date(2026, 10, 13), date(2026, 10, 13)
+            )
+        )
+
+        removed = rs.remove_unavailable_period(self.rooms, "A101", 12)
+        self.assertEqual(removed, updated)
+        self.assertTrue(
+            rs.is_room_available(
+                self.room, date(2026, 10, 10), date(2026, 10, 20)
+            )
+        )
+
+    def test_unknown_closure_cannot_be_updated_or_removed(self) -> None:
+        """Unknown closure identifiers are rejected."""
+        with self.assertRaises(rs.UnavailablePeriodNotFoundError):
+            rs.update_unavailable_period(
+                self.rooms,
+                "A101",
+                999,
+                date(2026, 10, 10),
+                date(2026, 10, 12),
+            )
+        with self.assertRaises(rs.UnavailablePeriodNotFoundError):
+            rs.remove_unavailable_period(self.rooms, "A101", 999)
 
     def test_missing_room_raises(self) -> None:
         """Check: missing room raises."""

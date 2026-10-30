@@ -178,6 +178,24 @@ def has_time_overlap(
     return start < existing_end and existing_start < end
 
 
+def reservation_occurs_during(
+    reservation: Reservation, start_date: date, end_date: date
+) -> bool:
+    """Check whether a reservation meets in an inclusive date range."""
+    first_possible = max(start_date, reservation.start_date)
+    last_possible = min(end_date, reservation.last_date)
+    if first_possible > last_possible:
+        return False
+    if reservation.repetition is Repetition.ONCE:
+        return start_date <= reservation.start_date <= end_date
+
+    days_until_meeting = (
+        reservation.start_date.weekday() - first_possible.weekday()
+    ) % 7
+    first_meeting = first_possible + timedelta(days=days_until_meeting)
+    return first_meeting <= last_possible
+
+
 def has_date_overlap(
     first_start: date, first_end: date, second_start: date, second_end: date
 ) -> bool:
@@ -431,6 +449,36 @@ class ReservationService:
             )
             if conflict_date:
                 raise RoomClosureConflictError(reservation, conflict_date)
+
+    def has_booking_conflict(
+        self,
+        room_id: str,
+        start_date: date,
+        end_date: date,
+        start_time: time,
+        end_time: time,
+    ) -> bool:
+        """Check whether a room has a booking overlapping a requested slot."""
+        if end_date < start_date:
+            raise InvalidReservationError(
+                "End date must not be before start date."
+            )
+        if start_time >= end_time:
+            raise InvalidReservationError(
+                "End time must be strictly after start time."
+            )
+        return any(
+            reservation_occurs_during(
+                reservation, start_date, end_date
+            )
+            and has_time_overlap(
+                start_time,
+                end_time,
+                reservation.start_time,
+                reservation.end_time,
+            )
+            for reservation in self._repository.get_by_room(room_id)
+        )
 
     def get_schedule(
         self, week_start: date, room_id: Optional[str] = None

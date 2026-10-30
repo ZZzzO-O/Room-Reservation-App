@@ -331,14 +331,3 @@ export async function exportScheduleReport(weekStart, roomId) {
   document.body.removeChild(link);
   window.URL.revokeObjectURL(downloadUrl);
 }
-
-/**
- * Reset the local reservation store back to the seed reservations.
- */
-export function resetReservationsToSeed() {
-  localStorage.setItem(
-    RESERVATIONS_STORAGE_KEY,
-    JSON.stringify(SEED_RESERVATIONS)
-  );
-  return SEED_RESERVATIONS;
-}
