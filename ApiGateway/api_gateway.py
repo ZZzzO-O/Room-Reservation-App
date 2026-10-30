@@ -52,6 +52,7 @@ ERROR_STATUS = {
     rs.InvalidRoomError: 400,
     rs.RoomNotFoundError: 404,
     rs.DuplicateRoomError: 409,
+    rs.RoomCapacityConflictError: 409,
     rservice.InvalidReservationError: 400,
     rservice.CapacityExceededError: 400,
     rservice.RoomUnavailableError: 409,
@@ -518,12 +519,18 @@ def get_room(room_id: str) -> Tuple[Response, int]:
 def edit_room(room_id: str) -> Tuple[Response, int]:
     """Change a room's capacity, equipment, or name (Staff only)."""
     data = body()
+    existing_reservations = state().reservations.get_by_room(room_id)
+    largest_reserved_group = max(
+        (reservation.group_size for reservation in existing_reservations),
+        default=None,
+    )
     room = rs.edit_room(
         state().rooms,
         room_id=room_id,
         capacity=data.get("capacity"),
         equipment=data.get("equipment"),
         name=data.get("name"),
+        largest_reserved_group=largest_reserved_group,
     )
     save(db.save_room, room)
     return jsonify({

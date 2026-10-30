@@ -28,6 +28,10 @@ class RoomNotFoundError(RoomError):
     """Raised when a room id does not exist."""
 
 
+class RoomCapacityConflictError(RoomError):
+    """Raised when a capacity change would invalidate an existing reservation."""
+
+
 @dataclass(slots=True)
 class UnavailablePeriod:
     """A date range, inclusive at both ends, when a room cannot be used."""
@@ -147,6 +151,7 @@ def edit_room(
     capacity: Optional[int] = None,
     equipment: Optional[Dict[str, int]] = None,
     name: Optional[str] = None,
+    largest_reserved_group: Optional[int] = None,
 ) -> Room:
     """
     Args:
@@ -156,6 +161,8 @@ def edit_room(
         equipment (Optional[Dict[str, int]]): New equipment, or None to
             keep it. When given, it replaces the old equipment.
         name (Optional[str]): New room name, or None to keep it.
+        largest_reserved_group (Optional[int]): Largest group size in an
+            existing reservation for this room.
 
     Returns:
         Room: The updated room.
@@ -163,6 +170,8 @@ def edit_room(
     Raises:
         RoomNotFoundError: If the room does not exist.
         InvalidRoomError: If a new value is not valid.
+        RoomCapacityConflictError: If a capacity change makes an existing
+            reservation too large.
     """
     room = get_room(rooms, room_id)
     new_capacity = room.capacity if capacity is None else capacity
@@ -171,6 +180,15 @@ def edit_room(
     )
     new_name = room.name if name is None else name
     validate_room_details(room_id, new_capacity, new_equipment, new_name)
+    if (
+        largest_reserved_group is not None
+        and new_capacity != room.capacity
+        and new_capacity < largest_reserved_group
+    ):
+        raise RoomCapacityConflictError(
+            f"Capacity must be at least {largest_reserved_group} seats "
+            "to fit existing reservations."
+        )
     room.capacity = new_capacity
     room.equipment = new_equipment
     room.name = new_name

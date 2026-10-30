@@ -16,12 +16,29 @@ const ROOM_TYPES = ['Classroom', 'Lab', 'Computer Lab', 'Meeting Room'];
  * @param {Object} props
  * @param {boolean} props.isOpen - Whether modal is visible.
  * @param {Object|null} props.room - Existing room to edit, or null when creating.
+ * @param {Object[]} props.reservations - Existing reservations for room capacity validation.
  * @param {function} props.onClose - Callback to close modal.
  * @param {function} props.onSuccess - Callback invoked after save.
  * @returns {JSX.Element|null} The room modal component.
  */
-export default function RoomModal({ isOpen, room, onClose, onSuccess }) {
+export default function RoomModal({
+  isOpen,
+  room,
+  reservations = [],
+  onClose,
+  onSuccess,
+}) {
   const isEditing = Boolean(room);
+  const roomId = room?.room_id || room?.id;
+  const largestReservedGroup = isEditing
+    ? reservations.reduce(
+        (largest, reservation) =>
+          String(reservation.room_id) === String(roomId)
+            ? Math.max(largest, Number(reservation.group_size) || 0)
+            : largest,
+        0
+      )
+    : 0;
 
   const [name, setName] = useState(room ? room.name : '');
   const [roomType, setRoomType] = useState(room ? room.room_type || 'Classroom' : 'Classroom');
@@ -48,6 +65,16 @@ export default function RoomModal({ isOpen, room, onClose, onSuccess }) {
     }
     if (capNum < 1) {
       setErrorMessage('Capacity must be at least 1.');
+      return;
+    }
+    if (
+      isEditing &&
+      capNum < room.capacity &&
+      capNum < largestReservedGroup
+    ) {
+      setErrorMessage(
+        `Capacity cannot be reduced below ${largestReservedGroup} seats because this room has an existing reservation for that group size.`
+      );
       return;
     }
     if (!name.trim()) {
@@ -152,6 +179,11 @@ export default function RoomModal({ isOpen, room, onClose, onSuccess }) {
             placeholder="e.g. 40"
             className={INPUT}
           />
+          {largestReservedGroup > 0 && (
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              At least {largestReservedGroup} seats are needed for existing reservations.
+            </p>
+          )}
         </div>
 
         <fieldset className="pt-3 border-t border-slate-200 dark:border-slate-700">

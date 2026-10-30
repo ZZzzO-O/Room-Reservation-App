@@ -101,6 +101,7 @@ export default function App() {
           {activeView === 'browse' && (
             <BrowsePage
               rooms={rooms}
+              reservations={reservations}
               currentUser={currentUser}
               onBookClick={handleBookClick}
               onRefreshRooms={reloadData}

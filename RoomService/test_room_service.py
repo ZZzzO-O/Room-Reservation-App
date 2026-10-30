@@ -122,6 +122,27 @@ class TestEditRoom(RoomTestCase):
         self.assertEqual(room.equipment, {"projector": 1})
         self.assertEqual(room.name, "Pioneer")
 
+    def test_edit_capacity_below_existing_reservation_is_rejected(self) -> None:
+        """Check: capacity cannot be lowered below a reserved group size."""
+        with self.assertRaises(rs.RoomCapacityConflictError):
+            rs.edit_room(
+                self.rooms,
+                "A101",
+                capacity=30,
+                largest_reserved_group=35,
+            )
+        self.assertEqual(self.rooms["A101"].capacity, 40)
+
+    def test_edit_capacity_to_existing_reservation_size_is_allowed(self) -> None:
+        """Check: a room can fit a reservation exactly at its new capacity."""
+        room = rs.edit_room(
+            self.rooms,
+            "A101",
+            capacity=35,
+            largest_reserved_group=35,
+        )
+        self.assertEqual(room.capacity, 35)
+
     def test_edit_equipment_only_keeps_capacity_and_name(self) -> None:
         """Check: edit equipment only keeps capacity and name."""
         room = rs.edit_room(self.rooms, "A101", equipment={"mic": 2})

@@ -52,6 +52,7 @@ function FilterToggle({ id, label, checked, onChange }) {
  * Main classroom browsing dashboard.
  * @param {Object} props
  * @param {Object[]} props.rooms - Array of normalized rooms.
+ * @param {Object[]} props.reservations - Existing room reservations.
  * @param {Object|null} props.currentUser - Active user.
  * @param {function} props.onBookClick - Handler when user clicks Book.
  * @param {function} props.onRefreshRooms - Handler to refetch rooms after CRUD.
@@ -59,6 +60,7 @@ function FilterToggle({ id, label, checked, onChange }) {
  */
 export default function BrowsePage({
   rooms,
+  reservations,
   currentUser,
   onBookClick,
   onRefreshRooms,
@@ -304,6 +306,7 @@ export default function BrowsePage({
         <RoomModal
           isOpen={isRoomModalOpen}
           room={roomToEdit}
+          reservations={reservations}
           onClose={() => setIsRoomModalOpen(false)}
           onSuccess={onRefreshRooms}
         />

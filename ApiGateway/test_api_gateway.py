@@ -173,6 +173,32 @@ class TestRoomRoutes(GatewayTestCase):
         res = self.client.get("/api/rooms/606", headers=self.staff)
         self.assertEqual(res.status_code, 404)
 
+    def test_capacity_cannot_be_lowered_below_existing_reservation(self) -> None:
+        """Reject a capacity reduction that would invalidate a booking."""
+        booked = self.book(group_size=35)
+        self.assertEqual(booked.status_code, 201)
+
+        res = self.client.put(
+            "/api/rooms/601", json={"capacity": 30}, headers=self.staff
+        )
+
+        self.assertEqual(res.status_code, 409)
+        self.assertIn("at least 35 seats", res.get_json()["error"])
+        room = self.client.get("/api/rooms/601", headers=self.staff)
+        self.assertEqual(room.get_json()["room"]["capacity"], 40)
+
+    def test_capacity_can_be_reduced_to_existing_reservation_size(self) -> None:
+        """Allow capacity reductions that still fit existing bookings."""
+        booked = self.book(group_size=35)
+        self.assertEqual(booked.status_code, 201)
+
+        res = self.client.put(
+            "/api/rooms/601", json={"capacity": 35}, headers=self.staff
+        )
+
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.get_json()["room"]["capacity"], 35)
+
     def test_mark_unavailable(self) -> None:
         """Closing a room works; a bad date gives a clear 400."""
         url = "/api/rooms/601/unavailable"
