@@ -214,6 +214,45 @@ class TestRoomRoutes(GatewayTestCase):
         self.assertEqual(res.status_code, 400)
         self.assertIn("YYYY-MM-DD", res.get_json()["error"])
 
+    def test_mark_unavailable_rejects_existing_booking(self) -> None:
+        """An overlapping booking blocks closure and remains intact."""
+        booking = self.book(
+            room_id="601",
+            start_date="2026-11-05",
+            end_date=None,
+            repetition="Once",
+        )
+        self.assertEqual(booking.status_code, 201)
+        reservation_id = booking.get_json()["reservation"]["reservation_id"]
+
+        closure = self.client.post(
+            "/api/rooms/601/unavailable",
+            headers=self.staff,
+            json={
+                "start_date": "2026-11-04",
+                "end_date": "2026-11-10",
+                "reason": "Renovation",
+            },
+        )
+
+        self.assertEqual(closure.status_code, 409)
+        self.assertEqual(closure.get_json()["conflict_date"], "2026-11-05")
+        self.assertEqual(
+            closure.get_json()["conflicting_reservation"]["reservation_id"],
+            reservation_id,
+        )
+        reservations = self.client.get(
+            "/api/reservations?room_id=601", headers=self.staff
+        ).get_json()["reservations"]
+        self.assertEqual(
+            [reservation["reservation_id"] for reservation in reservations],
+            [reservation_id],
+        )
+        room = self.client.get(
+            "/api/rooms/601", headers=self.staff
+        ).get_json()["room"]
+        self.assertEqual(room["unavailable_periods"], [])
+
     def test_available_and_recommend(self) -> None:
         """Search only returns rooms that fit; recommend picks smallest."""
         query = "?group_size=55&start_date=2026-10-14&end_date=2026-10-14"

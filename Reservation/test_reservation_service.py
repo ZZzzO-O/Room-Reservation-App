@@ -23,6 +23,7 @@ try:
         InvalidReservationError,
         ReservationConflictError,
         ReservationService,
+        RoomClosureConflictError,
         RoomNotFoundError,
         RoomUnavailableError,
         has_time_overlap,
@@ -40,6 +41,7 @@ except ImportError:
         InvalidReservationError,
         ReservationConflictError,
         ReservationService,
+        RoomClosureConflictError,
         RoomNotFoundError,
         RoomUnavailableError,
         has_time_overlap,
@@ -372,6 +374,110 @@ class ReservationServiceTest(unittest.TestCase):
         self.assertIn("CMKL CLASSROOM RESERVATION SCHEDULE", text)
         self.assertIn("Total Bookings: 1", text)
         self.assertIn("Databases", text)
+
+    def test_cancel_reservations_for_closure_single_day(self) -> None:
+        """Single-day booking within a closure period is cancelled."""
+        nov5 = date(2026, 11, 5)
+        res = self.service.create_reservation(
+            replace(make_once(nov5), room_id="R1")
+        )
+        self.assertEqual(len(self.service.get_all_reservations()), 1)
+
+        # Staff closes R1 from Nov 4 to Nov 10
+        cancelled = self.service.cancel_reservations_for_closure(
+            "R1", date(2026, 11, 4), date(2026, 11, 10)
+        )
+        self.assertEqual(len(cancelled), 1)
+        self.assertEqual(cancelled[0].reservation_id, res.reservation_id)
+        self.assertEqual(self.service.get_all_reservations(), [])
+
+    def test_cancel_reservations_for_closure_weekly(self) -> None:
+        """Weekly booking with a meeting in closure range is cancelled."""
+        res = self.service.create_reservation(
+            make_weekly(start_date=MONDAY, room_id="R1")
+        )
+        # Closure covering the second Monday (NEXT_MONDAY)
+        cancelled = self.service.cancel_reservations_for_closure(
+            "R1", NEXT_MONDAY, NEXT_MONDAY
+        )
+        self.assertEqual(len(cancelled), 1)
+        self.assertEqual(cancelled[0].reservation_id, res.reservation_id)
+        self.assertEqual(self.service.get_all_reservations(), [])
+
+    def test_cancel_reservations_leaves_other_rooms_untouched(self) -> None:
+        """Closure on one room does not cancel bookings in another room."""
+        nov5 = date(2026, 11, 5)
+        res_r1 = self.service.create_reservation(
+            replace(make_once(nov5), room_id="R1")
+        )
+        res_r2 = self.service.create_reservation(
+            replace(make_once(nov5), room_id="R2", group_size=5)
+        )
+        cancelled = self.service.cancel_reservations_for_closure(
+            "R1", date(2026, 11, 4), date(2026, 11, 10)
+        )
+        self.assertEqual([r.reservation_id for r in cancelled],
+                         [res_r1.reservation_id])
+        remaining = self.service.get_all_reservations()
+        self.assertEqual(len(remaining), 1)
+        self.assertEqual(remaining[0].reservation_id, res_r2.reservation_id)
+
+    def test_cancel_reservations_outside_closure_untouched(self) -> None:
+        """Bookings outside closure range are not cancelled."""
+        res = self.service.create_reservation(
+            replace(make_once(date(2026, 11, 15)), room_id="R1")
+        )
+        cancelled = self.service.cancel_reservations_for_closure(
+            "R1", date(2026, 11, 4), date(2026, 11, 10)
+        )
+        self.assertEqual(len(cancelled), 0)
+        self.assertEqual(len(self.service.get_all_reservations()), 1)
+
+    def test_cancel_reservations_invalid_dates_raises(self) -> None:
+        """Reversed closure dates raise ValueError."""
+        with self.assertRaises(ValueError):
+            self.service.cancel_reservations_for_closure(
+                "R1", date(2026, 11, 10), date(2026, 11, 4)
+            )
+
+    def test_closure_rejects_overlapping_once_reservation(self) -> None:
+        """A Nov 4–10 closure rejects a one-time Nov 5 booking."""
+        reservation = self.service.create_reservation(
+            replace(make_once(date(2026, 11, 5)), room_id="R1")
+        )
+
+        with self.assertRaises(RoomClosureConflictError) as context:
+            self.service.validate_room_closure(
+                "R1", date(2026, 11, 4), date(2026, 11, 10)
+            )
+
+        self.assertEqual(context.exception.reservation, reservation)
+        self.assertEqual(context.exception.conflict_date, date(2026, 11, 5))
+        self.assertEqual(len(self.service.get_all_reservations()), 1)
+
+    def test_closure_rejects_weekly_occurrence_inside_range(self) -> None:
+        """A closure detects the actual weekday occurrence of a weekly booking."""
+        reservation = self.service.create_reservation(
+            make_weekly(start_date=MONDAY, room_id="R1")
+        )
+
+        with self.assertRaises(RoomClosureConflictError) as context:
+            self.service.validate_room_closure(
+                "R1", date(2026, 11, 4), date(2026, 11, 10)
+            )
+
+        self.assertEqual(context.exception.reservation, reservation)
+        self.assertEqual(context.exception.conflict_date, date(2026, 11, 9))
+
+    def test_closure_allows_booking_on_another_weekday(self) -> None:
+        """A weekly series does not conflict if no occurrence is in the range."""
+        self.service.create_reservation(
+            make_weekly(start_date=MONDAY, room_id="R1")
+        )
+
+        self.service.validate_room_closure(
+            "R1", date(2026, 11, 4), date(2026, 11, 8)
+        )
 
 
 if __name__ == "__main__":

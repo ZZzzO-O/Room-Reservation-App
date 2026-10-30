@@ -59,6 +59,24 @@ class RoomUnavailableError(ReservationError):
     """Raised when the room is closed (e.g. renovation) during the booking."""
 
 
+class RoomClosureConflictError(ReservationError):
+    """Raised when a proposed closure overlaps an existing reservation."""
+
+    def __init__(
+        self, reservation: Reservation, conflict_date: date
+    ) -> None:
+        self.reservation = reservation
+        self.conflict_date = conflict_date
+        super().__init__(
+            f"Cannot close the room: reservation {reservation.reservation_id} "
+            f"({reservation.competency}) is booked for "
+            f"{conflict_date.isoformat()} from "
+            f"{reservation.start_time.strftime('%H:%M')} to "
+            f"{reservation.end_time.strftime('%H:%M')}. "
+            "Move or cancel this booking first."
+        )
+
+
 # Q8: flake8-bugbear flags this (B042): super() only gets
 # `message`, so copy/pickle can't rebuild the error. Heads-up: the obvious
 # fix super().__init__(message, conflicting_reservation) makes str(err) a
@@ -211,6 +229,45 @@ def is_conflicting(first: Reservation, second: Reservation) -> bool:
     )
 
 
+def conflicts_with_closure(
+    reservation: Reservation, closure_start: date, closure_end: date
+) -> bool:
+    """
+    Check whether any meeting date of a reservation falls within a closure.
+
+    Args:
+        reservation (Reservation): The reservation to test.
+        closure_start (date): First day of the room closure.
+        closure_end (date): Last day of the room closure (inclusive).
+
+    Returns:
+        bool: True if at least one meeting date overlaps the closure.
+    """
+    return first_meeting_in_closure(
+        reservation, closure_start, closure_end
+    ) is not None
+
+
+def first_meeting_in_closure(
+    reservation: Reservation, closure_start: date, closure_end: date
+) -> Optional[date]:
+    """Return the first actual meeting date inside a closure, if any."""
+    if reservation.repetition is Repetition.ONCE:
+        if closure_start <= reservation.start_date <= closure_end:
+            return reservation.start_date
+        return None
+
+    overlap_start = max(reservation.start_date, closure_start)
+    overlap_end = min(reservation.last_date, closure_end)
+    if overlap_start > overlap_end:
+        return None
+
+    target_weekday = reservation.start_date.weekday()
+    days_until_meeting = (target_weekday - overlap_start.weekday()) % 7
+    meeting_date = overlap_start + timedelta(days=days_until_meeting)
+    return meeting_date if meeting_date <= overlap_end else None
+
+
 class ReservationService:
     """Service handling CRUD operations and validation for reservations."""
 
@@ -294,6 +351,35 @@ class ReservationService:
         if not self._repository.delete_reservation(reservation_id):
             raise _reservation_not_found(reservation_id)
 
+    def cancel_reservations_for_closure(
+        self, room_id: str, start_date: date, end_date: date
+    ) -> List[Reservation]:
+        """
+        Cancel all reservations in a room overlapping an unavailable range.
+
+        Args:
+            room_id (str): Room identifier.
+            start_date (date): First day of closure.
+            end_date (date): Last day of closure (inclusive).
+
+        Returns:
+            List[Reservation]: The reservations that were cancelled.
+
+        Raises:
+            ValueError: If end_date is before start_date.
+        """
+        if end_date < start_date:
+            raise ValueError("End date must not be before start date.")
+        conflicted = [
+            res
+            for res in self._repository.get_by_room(room_id)
+            if conflicts_with_closure(res, start_date, end_date)
+        ]
+        for res in conflicted:
+            if res.reservation_id is not None:
+                self._repository.delete_reservation(res.reservation_id)
+        return conflicted
+
     def get_reservation(self, reservation_id: str) -> Reservation:
         """
         Fetch one reservation.
@@ -332,6 +418,19 @@ class ReservationService:
             List[Reservation]: All reservations in storage.
         """
         return self._repository.get_all()
+
+    def validate_room_closure(
+        self, room_id: str, start_date: date, end_date: date
+    ) -> None:
+        """Reject a closure if any existing room booking meets in its range."""
+        if end_date < start_date:
+            raise ValueError("End date must not be before start date.")
+        for reservation in self._repository.get_by_room(room_id):
+            conflict_date = first_meeting_in_closure(
+                reservation, start_date, end_date
+            )
+            if conflict_date:
+                raise RoomClosureConflictError(reservation, conflict_date)
 
     def get_schedule(
         self, week_start: date, room_id: Optional[str] = None
