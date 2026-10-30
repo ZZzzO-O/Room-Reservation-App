@@ -54,6 +54,7 @@ ERROR_STATUS = {
     rs.DuplicateRoomError: 409,
     rservice.InvalidReservationError: 400,
     rservice.CapacityExceededError: 400,
+    rservice.RoomClosureConflictError: 409,
     rservice.RoomUnavailableError: 409,
     rservice.RoomNotFoundError: 404,
     rdata.ReservationNotFoundError: 404,
@@ -548,11 +549,14 @@ def delete_room(room_id: str) -> Tuple[Response, int]:
 def mark_unavailable(room_id: str) -> Tuple[Response, int]:
     """Close a room for a date range (Staff only)."""
     data = body()
+    start_date = to_date(data.get("start_date", ""))
+    end_date = to_date(data.get("end_date", ""))
+    state().booking.validate_room_closure(room_id, start_date, end_date)
     period = rs.mark_room_unavailable(
         state().rooms,
         room_id,
-        to_date(data.get("start_date", "")),
-        to_date(data.get("end_date", "")),
+        start_date,
+        end_date,
         data.get("reason", ""),
     )
     save(db.save_unavailable_period, room_id, period)
@@ -728,6 +732,17 @@ def register_error_handlers(app: Flask) -> None:
             error_type,
             lambda err, status=status: error(str(err), status),
         )
+
+    @app.errorhandler(rservice.RoomClosureConflictError)
+    def room_closure_conflict(
+        err: rservice.RoomClosureConflictError,
+    ) -> Any:
+        """Return the conflicting booking and first affected meeting date."""
+        return jsonify({
+            "error": str(err),
+            "conflicting_reservation": reservation_to_dict(err.reservation),
+            "conflict_date": err.conflict_date.isoformat(),
+        }), 409
 
     @app.errorhandler(rservice.ReservationConflictError)
     def conflict(err: rservice.ReservationConflictError) -> Any:

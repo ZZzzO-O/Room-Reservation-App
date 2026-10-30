@@ -56,8 +56,8 @@ export default function UnavailabilityModal({ isOpen, room, onClose, onSuccess }
     <ModalShell title={`Close room ${room.room_id || room.id}`} onClose={onClose}>
       <form onSubmit={handleSubmit} className="p-5 space-y-4">
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          No one can book {room.name || 'this room'} between these dates. Existing bookings in
-          the range are not cancelled automatically.
+          No one can book {room.name || 'this room'} between these dates. If a booking already
+          falls in this range, move or cancel it before closing the room.
         </p>
 
         {errorMessage && <div className={ERROR_BOX}>{errorMessage}</div>}

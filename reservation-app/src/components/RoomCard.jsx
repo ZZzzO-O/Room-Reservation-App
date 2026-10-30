@@ -50,6 +50,7 @@ export default function RoomCard({
   const isStaff = currentUser?.role === 'Staff';
   const roomNumber = room.room_id || room.id;
   const equipment = describeEquipment(room.equipment);
+  const hasUpcomingClosure = Boolean(room.upcomingClosure && room.isAvailable);
   const showName =
     room.name && room.name.toLowerCase() !== `room ${roomNumber}`.toLowerCase();
 
@@ -67,12 +68,18 @@ export default function RoomCard({
           </h3>
           <span
             className={`text-xs font-medium shrink-0 ${
-              room.isAvailable
-                ? 'text-green-700 dark:text-green-400'
-                : 'text-red-700 dark:text-red-400'
+              !room.isAvailable
+                ? 'text-red-700 dark:text-red-400'
+                : hasUpcomingClosure
+                  ? 'text-amber-700 dark:text-amber-300'
+                  : 'text-green-700 dark:text-green-400'
             }`}
           >
-            {room.isAvailable ? 'Available' : 'Closed'}
+            {!room.isAvailable
+              ? 'Closed'
+              : hasUpcomingClosure
+                ? 'Closure scheduled'
+                : 'Available'}
           </span>
         </div>
 
@@ -92,6 +99,12 @@ export default function RoomCard({
           <p className="pt-2 border-t border-slate-100 dark:border-slate-700 text-xs text-red-700 dark:text-red-300 tabular-nums">
             Closed: {room.closureReason}
             {room.activeClosure && ` (until ${room.activeClosure.end_date})`}
+          </p>
+        )}
+        {hasUpcomingClosure && (
+          <p className="pt-2 border-t border-slate-100 dark:border-slate-700 text-xs text-amber-800 dark:text-amber-200 tabular-nums">
+            Scheduled: {room.upcomingClosure.reason || 'Unavailable'} (
+            {room.upcomingClosure.start_date} to {room.upcomingClosure.end_date})
           </p>
         )}
       </div>

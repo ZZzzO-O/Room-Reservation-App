@@ -23,6 +23,7 @@ try:
         InvalidReservationError,
         ReservationConflictError,
         ReservationService,
+        RoomClosureConflictError,
         RoomNotFoundError,
         RoomUnavailableError,
         has_time_overlap,
@@ -40,6 +41,7 @@ except ImportError:
         InvalidReservationError,
         ReservationConflictError,
         ReservationService,
+        RoomClosureConflictError,
         RoomNotFoundError,
         RoomUnavailableError,
         has_time_overlap,
@@ -437,6 +439,45 @@ class ReservationServiceTest(unittest.TestCase):
             self.service.cancel_reservations_for_closure(
                 "R1", date(2026, 11, 10), date(2026, 11, 4)
             )
+
+    def test_closure_rejects_overlapping_once_reservation(self) -> None:
+        """A Nov 4–10 closure rejects a one-time Nov 5 booking."""
+        reservation = self.service.create_reservation(
+            replace(make_once(date(2026, 11, 5)), room_id="R1")
+        )
+
+        with self.assertRaises(RoomClosureConflictError) as context:
+            self.service.validate_room_closure(
+                "R1", date(2026, 11, 4), date(2026, 11, 10)
+            )
+
+        self.assertEqual(context.exception.reservation, reservation)
+        self.assertEqual(context.exception.conflict_date, date(2026, 11, 5))
+        self.assertEqual(len(self.service.get_all_reservations()), 1)
+
+    def test_closure_rejects_weekly_occurrence_inside_range(self) -> None:
+        """A closure detects the actual weekday occurrence of a weekly booking."""
+        reservation = self.service.create_reservation(
+            make_weekly(start_date=MONDAY, room_id="R1")
+        )
+
+        with self.assertRaises(RoomClosureConflictError) as context:
+            self.service.validate_room_closure(
+                "R1", date(2026, 11, 4), date(2026, 11, 10)
+            )
+
+        self.assertEqual(context.exception.reservation, reservation)
+        self.assertEqual(context.exception.conflict_date, date(2026, 11, 9))
+
+    def test_closure_allows_booking_on_another_weekday(self) -> None:
+        """A weekly series does not conflict if no occurrence is in the range."""
+        self.service.create_reservation(
+            make_weekly(start_date=MONDAY, room_id="R1")
+        )
+
+        self.service.validate_room_closure(
+            "R1", date(2026, 11, 4), date(2026, 11, 8)
+        )
 
 
 if __name__ == "__main__":

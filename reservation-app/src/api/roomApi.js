@@ -148,6 +148,9 @@ export function normalizeRoom(raw) {
   const activeClosure = periods.find(
     (p) => today >= p.start_date && today <= p.end_date
   );
+  const upcomingClosure = periods
+    .filter((period) => period.end_date >= today)
+    .sort((a, b) => a.start_date.localeCompare(b.start_date))[0] || null;
 
   const meta = CMKL_ROOM_METADATA[roomId] || {};
   const rawRoomType = raw.room_type || meta.type || 'Classroom';
@@ -189,6 +192,7 @@ export function normalizeRoom(raw) {
     isAvailable: !activeClosure,
     closureReason: activeClosure ? activeClosure.reason : null,
     activeClosure,
+    upcomingClosure,
   };
 }
 
