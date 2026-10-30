@@ -1,0 +1,15 @@
+************* Module reservation_data.py
+reservation_data.py:1:0: F0001: No module named reservation_data.py (fatal)
+************* Module test_reservation_service.py
+test_reservation_service.py:1:0: F0001: No module named test_reservation_service.py (fatal)
+************* Module reservation_service
+reservation_service.py:12:0: E0401: Unable to import 'SoftwarePrecess.reservation_data' (import-error)
+reservation_service.py:23:0: R0903: Too few public methods (0/2) (too-few-public-methods)
+reservation_service.py:27:0: R0903: Too few public methods (0/2) (too-few-public-methods)
+reservation_service.py:31:0: R0903: Too few public methods (0/2) (too-few-public-methods)
+reservation_service.py:35:0: R0903: Too few public methods (0/2) (too-few-public-methods)
+reservation_service.py:52:0: R0903: Too few public methods (1/2) (too-few-public-methods)
+
+-----------------------------------
+Your code has been rated at 0.00/10
+
