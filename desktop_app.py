@@ -11,6 +11,7 @@ http://127.0.0.1:5000, then opens the default web browser automatically.
 
 from pathlib import Path
 import os
+import socket
 import sys
 import threading
 import time
@@ -134,11 +135,41 @@ def setup_desktop_app() -> Tuple[Flask, str]:
     return app, db_file
 
 
-def open_browser() -> None:
+DEFAULT_PORT = 5000
+FALLBACK_PORT = 5050
+
+
+def pick_port() -> int:
+    """
+    Choose the port to serve on: $PORT if set, otherwise 5000.
+
+    If that port is taken (on macOS, AirPlay Receiver uses 5000), try 5050.
+
+    Returns:
+        int: A free port on 127.0.0.1.
+
+    Raises:
+        SystemExit: If neither port is free, with a message saying what to do.
+    """
+    wanted = int(os.environ.get("PORT", DEFAULT_PORT))
+    for port in dict.fromkeys((wanted, FALLBACK_PORT)):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            try:
+                probe.bind(("127.0.0.1", port))
+                return port
+            except OSError:
+                print(f"  [!] Port {port} is already in use.")
+    raise SystemExit(
+        "No free port. Stop the program using port "
+        f"{wanted}, or start with PORT=<free port>."
+    )
+
+
+def open_browser(url: str) -> None:
     """Wait for server startup and open the app in the default web browser."""
     time.sleep(1.2)
-    print("  [+] Launching browser: http://127.0.0.1:5000 ...")
-    webbrowser.open_new("http://127.0.0.1:5000")
+    print(f"  [+] Launching browser: {url} ...")
+    webbrowser.open_new(url)
 
 
 def main() -> None:
@@ -149,16 +180,18 @@ def main() -> None:
     print("=" * 65)
 
     app, db_file = setup_desktop_app()
+    port = pick_port()
+    url = f"http://127.0.0.1:{port}"
     print(f"  [+] Database connected: {db_file}")
-    print("  [+] Web UI & API Gateway online at: http://127.0.0.1:5000")
+    print(f"  [+] Web UI & API Gateway online at: {url}")
     print("  [+] Press Ctrl+C in this terminal to exit.")
     print("=" * 65)
 
     # Launch browser in a background thread so it doesn't block the server
-    threading.Thread(target=open_browser, daemon=True).start()
+    threading.Thread(target=open_browser, args=(url,), daemon=True).start()
 
     # Start Flask server
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    app.run(host="127.0.0.1", port=port, debug=False)
 
 
 if __name__ == "__main__":

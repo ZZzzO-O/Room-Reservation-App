@@ -5,6 +5,7 @@ Fixes the Python 3.10.0 dis.py opcode constant index bug, then runs PyInstaller.
 """
 
 import dis
+import os
 
 # Fix Python 3.10.0 dis.py IndexError bug
 orig_get_const_info = dis._get_const_info
@@ -26,11 +27,11 @@ if __name__ == "__main__":
         '--clean',
         '--onefile',
         '--name', 'ClassroomReservationApp',
-        '--add-data', 'reservation-app/dist;reservation-app/dist',
-        '--add-data', 'RoomService;RoomService',
-        '--add-data', 'Database;Database',
-        '--add-data', 'AuthService;AuthService',
-        '--add-data', 'Reservation;Reservation',
-        '--add-data', 'ApiGateway;ApiGateway',
+        '--add-data', f'reservation-app/dist{os.pathsep}reservation-app/dist',
+        '--add-data', f'RoomService{os.pathsep}RoomService',
+        '--add-data', f'Database{os.pathsep}Database',
+        '--add-data', f'AuthService{os.pathsep}AuthService',
+        '--add-data', f'Reservation{os.pathsep}Reservation',
+        '--add-data', f'ApiGateway{os.pathsep}ApiGateway',
         'desktop_app.py'
     ])
