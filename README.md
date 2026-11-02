@@ -106,11 +106,11 @@ development-mode sample accounts.
 
 ## Azure deployment preparation
 
-The app now supports Azure Database for PostgreSQL and can run without
-published demo accounts. Azure resources have not been created or deployed:
-that requires an Azure subscription and approval of ongoing resource costs.
-See [AZURE_DEPLOYMENT.md](AZURE_DEPLOYMENT.md) for the architecture,
-configuration, account provisioning, and the remaining manual steps.
+The app supports Azure Database for PostgreSQL and production mode. The
+PostgreSQL server and container registry have been created, but the application
+image and web app have not yet been deployed. See
+[AZURE_DEPLOYMENT.md](AZURE_DEPLOYMENT.md) for the architecture, GitHub Actions
+image publishing setup, account provisioning, and remaining manual steps.
 
 ### Open or install the web app
 

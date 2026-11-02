@@ -55,11 +55,32 @@ limits.
    into the same approved network. If using a public database endpoint, restrict
    its firewall to the web app's outbound IP addresses and recheck those
    addresses after app-plan changes.
-4. **Build and publish the image.** From the repository root, build the
-   existing `Dockerfile` and publish the image to the registry. Configure the
-   web app to pull it using managed identity with the minimum `AcrPull`
-   permission where supported. Do not commit registry credentials or database
-   passwords.
+4. **Build and publish the image with GitHub Actions.** ACR Tasks may be
+   blocked by student-subscription policy, and Azure Cloud Shell does not
+   provide a Docker daemon. This repository includes a GitHub Actions workflow
+   that builds the `Dockerfile` on a GitHub runner and pushes the image to ACR
+   whenever a commit is pushed to `main`. To enable it:
+   1. In the Azure portal, open the container registry and select
+      **Access keys**. Enable **Admin user**, then copy the **Login server**,
+      **Username**, and one password. The admin account has broad access to
+      this registry; do not share or commit these values.
+   2. In GitHub, open the repository's
+      **Settings → Secrets and variables → Actions → New repository secret**.
+      Add secrets named `ACR_LOGIN_SERVER`, `ACR_USERNAME`, and
+      `ACR_PASSWORD` using the copied values. Never paste these credentials
+      into chat, source files, or a workflow run.
+   3. Push the workflow to the repository's `main` branch. In the GitHub
+      repository, open **Actions → Build and publish container image** and
+      confirm the run succeeds. The workflow publishes
+      `room-reservation-app:latest` and a commit-specific tag to ACR. If it
+      fails, inspect the GitHub Actions log rather than retrying the blocked
+      `az acr build` command.
+   4. Configure the web app to pull
+      `roomreservation9692.azurecr.io/room-reservation-app:latest`. Prefer
+      managed identity with the minimum `AcrPull` permission where supported;
+      otherwise put registry credentials only in the web app's protected
+      container settings. Do not reuse the GitHub push credentials for app
+      runtime access if managed identity is available.
 5. **Configure runtime settings in Azure.** Add `APP_ENV=production` and
    `DATABASE_URL` to the web app's protected application settings. The URL
    should use the PostgreSQL server hostname, the application database/user,
