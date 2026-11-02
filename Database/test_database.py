@@ -42,6 +42,79 @@ class DatabaseTestCase(unittest.TestCase):
 class TestPostgresAdapter(unittest.TestCase):
     """Verify PostgreSQL-specific SQL adaptation without a live server."""
 
+    def test_context_manager_keeps_connection_open(self) -> None:
+        class FakeTransaction:
+            def __init__(self, connection):
+                self.connection = connection
+
+            def __enter__(self):
+                self.connection.transaction_entries += 1
+                return self
+
+            def __exit__(self, *_args):
+                self.connection.transaction_exits += 1
+                return False
+
+        class FakeConnection:
+            def __init__(self):
+                self.closed = False
+                self.transaction_entries = 0
+                self.transaction_exits = 0
+
+            def transaction(self):
+                return FakeTransaction(self)
+
+            def execute(self, query, _parameters=()):
+                if self.closed:
+                    raise AssertionError("connection was closed")
+                return query
+
+            def close(self):
+                self.closed = True
+
+        fake = FakeConnection()
+        adapter = db.PostgresConnection(fake)
+
+        with adapter:
+            self.assertIs(adapter.execute("SELECT 1"), "SELECT 1")
+
+        self.assertFalse(fake.closed)
+        self.assertEqual(fake.transaction_entries, 1)
+        self.assertEqual(fake.transaction_exits, 1)
+        self.assertIs(adapter.execute("SELECT 1"), "SELECT 1")
+
+    def test_nested_contexts_use_nested_transactions(self) -> None:
+        class FakeTransaction:
+            def __init__(self, connection):
+                self.connection = connection
+
+            def __enter__(self):
+                self.connection.transaction_entries += 1
+                return self
+
+            def __exit__(self, *_args):
+                self.connection.transaction_exits += 1
+                return False
+
+        class FakeConnection:
+            def __init__(self):
+                self.transaction_entries = 0
+                self.transaction_exits = 0
+
+            def transaction(self):
+                return FakeTransaction(self)
+
+        fake = FakeConnection()
+        adapter = db.PostgresConnection(fake)
+
+        with adapter:
+            with adapter:
+                self.assertEqual(len(adapter._transactions), 2)
+
+        self.assertEqual(fake.transaction_entries, 2)
+        self.assertEqual(fake.transaction_exits, 2)
+        self.assertEqual(adapter._transactions, [])
+
     def test_qmark_placeholders_are_translated(self) -> None:
         class FakeConnection:
             def execute(self, query, parameters):
@@ -65,15 +138,22 @@ class TestPostgresAdapter(unittest.TestCase):
         self.assertEqual(fake.parameters, ("SEN-201", "601"))
 
     def test_schema_uses_postgres_identity_for_closure_ids(self) -> None:
-        class FakeConnection:
-            def __init__(self):
-                self.statements = []
+        class FakeTransaction:
+            def __init__(self, connection):
+                self.connection = connection
 
             def __enter__(self):
                 return self
 
             def __exit__(self, *_args):
                 return False
+
+        class FakeConnection:
+            def __init__(self):
+                self.statements = []
+
+            def transaction(self):
+                return FakeTransaction(self)
 
             def execute(self, query, _parameters=()):
                 self.statements.append(query)

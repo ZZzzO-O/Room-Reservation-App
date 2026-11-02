@@ -48,18 +48,22 @@ class PostgresConnection:
 
     def __init__(self, connection: Any) -> None:
         self._connection = connection
+        self._transactions: list[Any] = []
 
     def execute(
         self, query: str, parameters: Sequence[object] = ()
     ) -> Any:
         return self._connection.execute(query.replace("?", "%s"), parameters)
 
-    def __enter__(self):
-        self._connection.__enter__()
+    def __enter__(self) -> "PostgresConnection":
+        transaction = self._connection.transaction()
+        transaction.__enter__()
+        self._transactions.append(transaction)
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        return self._connection.__exit__(exc_type, exc_value, traceback)
+    def __exit__(self, exc_type, exc_value, traceback) -> bool | None:
+        transaction = self._transactions.pop()
+        return transaction.__exit__(exc_type, exc_value, traceback)
 
     def close(self) -> None:
         self._connection.close()
