@@ -9,7 +9,9 @@ Unit test suite verifying SQLite database persistence and schema operations.
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 import sys
+from types import ModuleType
 import unittest
+from unittest.mock import Mock, patch
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR / "RoomService"))
@@ -41,6 +43,26 @@ class DatabaseTestCase(unittest.TestCase):
 
 class TestPostgresAdapter(unittest.TestCase):
     """Verify PostgreSQL-specific SQL adaptation without a live server."""
+
+    def test_postgres_connection_uses_autocommit(self) -> None:
+        fake_psycopg = ModuleType("psycopg")
+        fake_rows = ModuleType("psycopg.rows")
+        fake_rows.dict_row = object()
+        fake_psycopg.connect = Mock()
+        fake_psycopg.connect.return_value = object()
+
+        with patch.dict(
+            sys.modules,
+            {"psycopg": fake_psycopg, "psycopg.rows": fake_rows},
+        ):
+            connection = db.get_connection("postgresql://localhost/database")
+
+        fake_psycopg.connect.assert_called_once_with(
+            "postgresql://localhost/database",
+            autocommit=True,
+            row_factory=fake_rows.dict_row,
+        )
+        self.assertIsInstance(connection, db.PostgresConnection)
 
     def test_context_manager_keeps_connection_open(self) -> None:
         class FakeTransaction:

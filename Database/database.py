@@ -89,7 +89,7 @@ def get_connection(db_path: str = DEFAULT_DB_FILE) -> DatabaseConnection:
                 "requirements-render.txt."
             ) from exc
         return PostgresConnection(
-            psycopg.connect(db_path, row_factory=dict_row)
+            psycopg.connect(db_path, autocommit=True, row_factory=dict_row)
         )
 
     conn = sqlite3.connect(db_path, check_same_thread=False)
