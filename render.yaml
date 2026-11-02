@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: room-reservation-app
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    disk:
+      name: room-reservation-data
+      mountPath: /var/data
+      sizeGB: 1

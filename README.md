@@ -79,6 +79,30 @@ See [reservation-app/README.md](reservation-app/README.md) (needs Node.js 20.19+
 
 ---
 
+## Public demo deployment (Render)
+
+The repository includes a Docker-based Render Blueprint (`render.yaml`). To deploy:
+
+1. Push the project to GitHub, including `Dockerfile`, `.dockerignore`,
+   `requirements-render.txt`, `wsgi.py`, and `render.yaml`. Do not add `app.db`.
+2. In Render, choose **New → Blueprint**, connect the repository and branch,
+   and review the service and persistent-disk cost before creating resources.
+   The disk is required to preserve SQLite data across restarts and deploys.
+3. Wait for the Docker build and health check to succeed, then open the
+   `onrender.com` URL shown in the Render dashboard.
+4. Test login, booking, page refresh, and persistence after a service restart
+   using fictional demo data only.
+
+The current application seeds documented test accounts and is intended for
+class demonstrations, not real public reservations. Anyone with the URL can
+reach the login page, and the published demo credentials must not be used for
+private data. Remove or secure demo account seeding and offline frontend
+fallbacks before using this deployment for real users. Render deployment and
+persistent storage may incur charges; confirm the current cost in the
+dashboard before creating the service.
+
+---
+
 ## REST API Endpoints
 
 ### Authentication

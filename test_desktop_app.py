@@ -5,6 +5,7 @@
 """Unit tests for desktop_app.py launcher and route overriding."""
 
 import unittest
+from unittest.mock import patch
 from flask import Flask, jsonify
 
 from desktop_app import setup_desktop_app
@@ -52,6 +53,21 @@ class TestDesktopApp(unittest.TestCase):
         self.assertEqual(res.status_code, 404)
         data = res.get_json()
         self.assertEqual(data["error"], "Endpoint not found")
+
+    @patch.dict("os.environ", {"DB_PATH": "/var/data/test-app.db"})
+    @patch("desktop_app.create_app")
+    def test_database_path_uses_environment_override(
+        self, create_app_mock
+    ) -> None:
+        """Hosted deployments can place SQLite on persistent storage."""
+        create_app_mock.return_value = Flask("database_path_test")
+
+        _app, db_file = setup_desktop_app()
+
+        self.assertEqual(db_file, "/var/data/test-app.db")
+        create_app_mock.assert_called_once_with(
+            db_path="/var/data/test-app.db"
+        )
 
     def test_resilience_to_renamed_root_function(self) -> None:
         """Desktop app overrides '/' even if gateway renames root()."""

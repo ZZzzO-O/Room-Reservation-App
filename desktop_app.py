@@ -10,6 +10,7 @@ http://127.0.0.1:5000, then opens the default web browser automatically.
 """
 
 from pathlib import Path
+import os
 import sys
 import threading
 import time
@@ -37,12 +38,14 @@ def setup_desktop_app() -> Tuple[Flask, str]:
     Returns:
         Tuple[Flask, str]: The configured Flask application and database path.
     """
-    # If running from PyInstaller frozen exe, app.db should reside next to .exe
+    # Keep local database defaults while allowing hosts to provide persistent
+    # storage outside the application directory.
     if getattr(sys, "frozen", False):
         exe_dir = Path(sys.executable).parent
-        db_file = str(exe_dir / "app.db")
+        default_db_file = exe_dir / "app.db"
     else:
-        db_file = str(BASE_DIR / "app.db")
+        default_db_file = BASE_DIR / "app.db"
+    db_file = os.environ.get("DB_PATH", str(default_db_file))
 
     app = create_app(db_path=db_file)
     dist_dir = BASE_DIR / "reservation-app" / "dist"
