@@ -7,7 +7,7 @@ RUN npm run build
 
 FROM python:3.12-slim
 WORKDIR /app
-COPY requirements-render.txt ./
+COPY requirements.txt requirements-render.txt ./
 RUN pip install --no-cache-dir -r requirements-render.txt
 COPY . .
 COPY --from=frontend /build/dist /app/reservation-app/dist
