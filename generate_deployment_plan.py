@@ -72,7 +72,7 @@ def build_deployment_plan():
     p_meta = doc.add_paragraph()
     p_meta.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_meta.paragraph_format.space_after = Pt(24)
-    run_meta = p_meta.add_run("Version 1.0  |  Latest Update: 2026-10-28  |  Target Release: Final Software Demo\nAuthor: Team Vibranium (Su Pyae Pyae Aung, Zin Zin Zaw Win, & Team)")
+    run_meta = p_meta.add_run("Version 1.1  |  Latest Update: 2026-11-02  |  Target Release: Public Class Demo\nStatus: Render demo is live; PWA update awaits push and redeployment\nAuthor: Team Vibranium (Su Pyae Pyae Aung, Zin Zin Zaw Win, & Team)")
     run_meta.font.name = "Arial"
     run_meta.font.size = Pt(10)
     run_meta.font.italic = True
@@ -140,171 +140,189 @@ def build_deployment_plan():
     # 1. SYSTEM REQUIREMENTS
     # =========================================================================
     add_h1("1. System Requirements")
-    add_p("The CMKL Classroom Reservation Application is engineered as a modern, decoupled web application comprising a reactive single-page frontend (React 19 + Tailwind CSS) and an asynchronous REST API backend (Python Flask + SQLite). The software is designed to operate seamlessly across both server and client execution contexts, satisfying all mandatory OS specifications outlined in the SEN-201 deployment syllabus.")
+    add_p("The deployed product is a browser-based progressive web application (PWA): a React single-page frontend and Flask REST API run together as a Docker web service on Render. Users visit the HTTPS service URL; the browser renders the client UI and sends API requests to the same origin. Docker, Python, and Node.js are build/server dependencies, not client installation requirements.")
 
-    add_h2("1.1 Supported Operating Systems & Environments")
-    add_bullet(" Windows 10 (Build 19041 and above) and Windows 11 (64-bit x86_64). Validated via standalone native executable packaging and local PowerShell execution.", "Microsoft Windows: ")
-    add_bullet(" macOS 14 (Sonoma) and macOS 15 (Sequoia). Supports both Intel x86_64 architectures and Apple Silicon ARM64 (M1/M2/M3/M4) via native Python execution and containerized runtimes.", "Apple macOS: ")
-    add_bullet(" SUSE Linux Enterprise Server (SLES) 15 and openSUSE Leap 15.4 / 15.5 / 15.6 (x86_64). Validated via systemd service units and POSIX-compliant deployment scripts.", "Linux SuSE Leap 15: ")
-    add_bullet(" Ubuntu Linux 14.04 LTS through current LTS releases (Ubuntu 18.04, 20.04, 22.04, and 24.04 LTS, x86_64). Tested both in bare-metal virtual environments and standardized OCI container runtimes.", "Linux Ubuntu: ")
+    add_h2("1.1 Client-Side Supported Environments")
+    add_p("These are target environments for browser-based use. The project has verified the hosted application URL, but has not completed a formal compatibility matrix across every listed browser and device. Record the browser/version and result when executing Section 6.")
+    add_bullet(" Windows 10/11 desktop or laptop using current stable Google Chrome or Microsoft Edge.", "Windows client: ")
+    add_bullet(" macOS 14/15 desktop or laptop using current stable Safari or Google Chrome.", "macOS client: ")
+    add_bullet(" Android phone or tablet using current stable Google Chrome; browser installation may be offered as Install app or Add to Home screen.", "Android client: ")
+    add_bullet(" iPhone or iPad using current stable Safari; users can add the website to the Home Screen from the Share menu.", "iOS/iPadOS client: ")
+    add_bullet(" A modern browser with JavaScript, localStorage, and HTTPS support. An internet connection is required for live API operations; the cached application shell is not an offline reservation service.", "Browser and network: ")
 
-    add_h2("1.2 Hardware Requirements")
-    add_bullet(" Dual-core 1.5 GHz 64-bit processor (x86_64 or ARM64).", "Processor (CPU): ")
-    add_bullet(" Minimum 2.0 GB RAM (4.0 GB recommended to accommodate modern multi-tab web browsers during client-side rendering).", "Physical Memory (RAM): ")
-    add_bullet(" Minimum 500 MB of free storage. The production distribution executable consumes ~14.0 MB, the initial SQLite database consumes ~1 MB, with remaining capacity reserved for application runtime logs, automated database backups, and browser caching.", "Storage / Disk Space: ")
-    add_bullet(" Standard 10/100/1000 Mbps network interface. The system binds to TCP Port 5000 by default (configurable via the PORT environment variable) over localhost loopback (127.0.0.1) or an assigned LAN/Intranet IP address.", "Networking & Ports: ")
-    add_bullet(" Minimum 1280 × 720 screen resolution recommended for optimal viewing of the room timetable and multi-column classroom cards.", "Display: ")
+    add_h2("1.2 Client Hardware and Display")
+    add_bullet(" A supported web browser on a phone, tablet, laptop, or desktop; no specific processor architecture is required by the client.", "Device: ")
+    add_bullet(" Recommended viewport: 1280 × 720 or larger for timetable and room cards. Smaller/mobile viewports should be included in responsive checks; this is a viewing recommendation, not a server requirement.", "Display: ")
+    add_bullet(" Client storage must allow browser localStorage for the current login/session and demo fallback behavior. Do not rely on browser storage as a shared or server-side database.", "Browser storage: ")
 
-    add_h2("1.3 Software Dependencies & Runtime Management")
-    add_p("In accordance with deployment best practices (Lecture 10), end users and evaluators are NOT required to manually configure complex runtimes. Software dependencies are handled automatically based on the chosen deployment format:")
-    add_bullet(" Zero external runtime dependencies required. The Python interpreter, Flask microframework, SQLite3 C-engine, and compiled React single-page application are fully embedded inside a single portable binary.", "Standalone Executable Kit (Primary Evaluation Format): ")
-    add_bullet(" Requires Docker Engine 20.10+ and Docker Compose v2.0+. No host-level Python or Node.js installations are required; dependencies are managed within container layers.", "Containerized Production Deployment (Server Format): ")
-    add_bullet(" Requires Python 3.10+ and a standard package manager (pip, uv, or conda). All third-party Python packages are tracked and pinned within requirements.txt.", "Source-Based Deployment (Developer Format): ")
+    add_h2("1.3 Hosted Server and Build Environment")
+    add_bullet(" Render hosts the public web service and provides a generated HTTPS onrender.com URL. The current demo uses Render's Free plan; the service may sleep when idle.", "Hosting: ")
+    add_bullet(" Render builds the Docker image using Node.js 22 for Vite and Python 3.12 for Flask/Gunicorn. End users do not install Docker, Python, or Node.js.", "Server build/runtime: ")
+    add_bullet(" SQLite is configured at /tmp/app.db for the free demo. This filesystem is ephemeral; records can be lost when the service sleeps, restarts, or redeploys. This deployment is for fictional class-demo data only.", "Demo database: ")
+    add_bullet(" A persistent disk is not configured because it is not included with the free service plan. Real or important reservations require an approved persistent data service and production account/security changes.", "Data limitation: ")
 
     # =========================================================================
     # 2. DEPLOYMENT STRATEGY SUMMARY
     # =========================================================================
     add_h1("2. Deployment Strategy Summary")
-    add_p("Following the principles of Lecture 10 (Packaging and Deployment), Team Vibranium adopts a Dual-Distribution Strategy designed to balance two essential goals: (1) an effortless, zero-install 3-minute evaluation experience for course examiners, and (2) a robust, multi-user production-ready architecture for campus-wide infrastructure.")
+    add_p("The current release is a public class-demo web deployment. The Render demo is live; the PWA files and corrected deployment documentation in this revision are implemented locally and must be pushed and successfully redeployed before the live URL has the installable version. A user opens the HTTPS URL in a supported browser; installation is optional. This section documents the actual Render configuration rather than unimplemented server platforms.")
 
-    add_h2("2.1 Dual-Tier Deployment Architecture")
-    add_bullet(" For the project viva and desktop users, the complete application is bundled into a self-contained executable (ClassroomReservationApp.exe on Windows, and standalone binaries for macOS/Linux). When launched, an automated orchestration script (desktop_app.py) provisions the embedded SQLite database (app.db), starts the Flask WSGI microservices on http://127.0.0.1:5000, and automatically launches the user's default web browser within 1.2 seconds. This completely eliminates runtime mismatch errors (e.g., 'Python not found' or 'Node version incompatible').", "Tier 1: Standalone Single-File Executable Kit (Evaluation & Local Demo). ")
-    add_bullet(" For long-term institutional deployment across Ubuntu and SuSE servers, the application is packaged as a Multi-Stage OCI Container (Dockerfile & docker-compose.yml). Stage 1 uses Node.js 20-Alpine to compile the optimized React production bundle via Vite. Stage 2 copies the minified static assets into a slim Python 3.10 runtime served behind an industrial-grade WSGI server (Gunicorn on POSIX / Waitress on Windows). An external volume mount guarantees database persistence across container updates.", "Tier 2: Multi-Stage Containerized Server Deployment (Production Infrastructure). ")
+    add_h2("2.1 Web Deployment Architecture")
+    add_bullet(" A browser connects over HTTPS to the Render-provided onrender.com hostname. Render routes requests to one Docker web service; Flask serves the compiled React application and /api endpoints from the same origin.", "Request path: ")
+    add_bullet(" The repository's Dockerfile builds the Vite frontend with Node.js 22, then installs Flask dependencies and runs the WSGI app with Gunicorn on Render's assigned PORT.", "Build and runtime: ")
+    add_bullet(" The Render Blueprint (render.yaml) specifies the Free plan, Docker runtime, /api/health health check, and DB_PATH=/tmp/app.db. No persistent disk or custom domain is configured.", "Hosted configuration: ")
+    add_bullet(" Render's generated HTTPS hostname and DNS are sufficient for public class-demo access; no user-managed DNS record is required. A custom domain is optional and requires adding the hostname in Render and creating the DNS record requested by Render.", "Public URL and DNS: ")
+    add_bullet(" The frontend includes a web app manifest, app icons, and a service worker to support browser installation and caching of the UI shell/static assets. Authentication and reservation API actions still require network access; offline changes do not synchronize.", "Optional browser installation: ")
 
-    add_h2("2.2 Tooling & Distribution Artifacts")
-    add_bullet(" PyInstaller 6.x (configured via build_exe.py with a custom dis.py opcode constant patch for Python 3.10 compatibility).", "Packaging Tool: ")
-    add_bullet(" Vite 6.x with Rollup for JavaScript bundling, asset tree-shaking, and CSS minification.", "Frontend Build Tool: ")
-    add_bullet(" Standard Python venv combined with requirements.txt (pinned dependencies) and Docker BuildKit.", "Dependency Management: ")
-    add_bullet(" A unified ClassroomReservationApp-Release-v1.0.zip archive containing the standalone executable, sample app.db, automated setup scripts (.bat / .sh), and documentation.", "Final Distribution Kit: ")
+    add_h2("2.2 Optional Installation Experience")
+    add_bullet(" Users can open the URL directly without installing anything. On supported desktop browsers, use the browser's Install app or Create shortcut menu; on Android use Install app/Add to Home screen; on iOS/iPadOS use Safari Share > Add to Home Screen.", "Browser installation: ")
+    add_bullet(" Installation creates a browser-managed app shortcut, not a native Windows/macOS binary. It does not remove the need for internet access or make the free-tier database persistent.", "Installation limitation: ")
+
+    add_h2("2.3 Build and Release Artifacts")
+    add_bullet(" Dockerfile and .dockerignore define the two-stage frontend/backend image build used by Render.", "Container build: ")
+    add_bullet(" render.yaml declares the Render web service, Free plan, health check, and ephemeral database path.", "Render Blueprint: ")
+    add_bullet(" requirements-render.txt and wsgi.py provide Gunicorn dependencies and the production WSGI entry point.", "Python runtime: ")
+    add_bullet(" reservation-app/public/manifest.webmanifest, service-worker.js, and 192px/512px icons support PWA installation and cached UI assets.", "PWA files: ")
+    add_bullet(" GitHub main branch is the deployment source; pushes trigger Render builds. The live service should be checked after each deployment.", "Release source: ")
 
     # =========================================================================
     # 3. INSTALLATION PACKAGE CONTENTS
     # =========================================================================
-    add_h1("3. Installation Package Contents")
-    add_p("This section enumerates all files and components included in the final distribution kit, categorized according to their operational function.")
+    add_h1("3. Web Application Delivery and Installation")
+    add_p("The normal user delivery is a URL, not a downloadable setup wizard. The same-origin web application includes the frontend, API, and browser-install metadata.")
 
     add_h2("3.1 Required Source or Compiled Files")
-    add_bullet(" Compiled Single-Page Application (SPA) production assets generated via Vite: reservation-app/dist/index.html, reservation-app/dist/assets/index-*.js (minified React application), reservation-app/dist/assets/index-*.css (compiled Tailwind stylesheet), and reservation-app/dist/favicon.svg.", "Frontend Production Bundle: ")
-    add_bullet(" Modular Flask backend packages: ApiGateway/ (api_gateway.py, routing, JWT middleware, CORS), AuthService/ (auth_service.py, seed_users.py), RoomService/ (room_service.py, models.py), Reservation/ (reservation_service.py), and Database/ (db.py).", "Backend Application Modules: ")
-    add_bullet(" desktop_app.py (desktop launcher with browser auto-open and cache-control headers) and wsgi.py (WSGI production gateway).", "Launcher & Gateway Scripts: ")
+    add_bullet(" Vite-generated React and Tailwind production files in reservation-app/dist/ are copied into the Docker image.", "Frontend bundle: ")
+    add_bullet(" Flask API gateway, Room Service, Reservation Service, Auth Service, and SQLite persistence modules are included in the server image.", "Backend modules: ")
+    add_bullet(" The web manifest lists the app name, standalone display mode, start URL, and 192px/512px PNG icons. The service worker caches the app shell and static assets, not API responses.", "Install metadata and assets: ")
+    add_bullet(" Docker, Python, Node.js, and Gunicorn are installed or used on the hosted build/runtime; browser users do not install these tools.", "Server-side dependencies: ")
 
-    add_h2("3.2 Required Third-Party Components")
-    add_bullet(" Flask (v2.3+), Flask-CORS (v3.0.10+), PyJWT (v2.8.0+), Werkzeug (v2.3+), and Gunicorn (v21.0+) / Waitress (v2.1+).", "Python Runtime Libraries: ")
-    add_bullet(" React (v19.0.0), React-DOM (v19.0.0), Lucide-React (v0.400+), and Tailwind CSS (v3.4+). All frontend dependencies are compiled and tree-shaken into the distribution bundle, requiring no client-side package downloads.", "Frontend Vendor Libraries: ")
-    add_bullet(" SQLite3 (embedded within Python standard library; zero separate database server installation needed).", "Database Engine: ")
+    add_h2("3.2 User Installation Steps")
+    add_bullet(" No installation is required: open the HTTPS Render URL in a supported browser.", "Use as a website: ")
+    add_bullet(" To install on desktop, use the browser menu's Install app/Create shortcut option when offered. On Android use Chrome's Install app/Add to Home screen; on iOS/iPadOS use Safari Share > Add to Home Screen.", "Optional PWA installation: ")
+    add_bullet(" The installed shortcut opens the hosted website and requires internet access for authentication and live bookings. The service worker provides a cached UI shell only; it is not an offline booking system.", "Online requirement: ")
 
-    add_h2("3.4 Required Graphical Assets, Configuration & Non-Program Files")
-    add_bullet(" CMKL University branding icons, building category SVG vectors, and UI status indicator graphics.", "Graphical Assets: ")
-    add_bullet(" Database/schema.sql (DDL defining relational tables: users, rooms, reservations, with foreign key integrity and audit timestamps).", "Database Schema: ")
-    add_bullet(" .env.example / config.py (defining PORT=5000, SECRET_KEY, FLASK_ENV=production, and DB_PATH=app.db).", "Configuration Files: ")
+    add_h2("3.3 Client-Side Supported Environments")
+    add_bullet(" Target clients are Windows 10/11 with current Chrome/Edge; macOS 14/15 with current Safari/Chrome; Android with current Chrome; and iOS/iPadOS with current Safari. These targets require formal execution of TC-DEP-02 through TC-DEP-04 before claiming verified compatibility.", "Browser matrix: ")
+    add_bullet(" End users need internet access and JavaScript/localStorage enabled. No Python, Node.js, Docker, or repository checkout is required on a client device.", "Client requirements: ")
 
-    add_h2("3.5 Documentation Files Provided")
-    add_bullet(" Comprehensive setup, execution, and quickstart guide.", "README.md: ")
-    add_bullet(" In-depth server deployment guide covering Windows, macOS, Ubuntu, and SuSE Leap 15.", "DEPLOYMENT.md: ")
-    add_bullet(" End-user manual detailing classroom search, reservation booking, schedule export, and role-based permissions.", "USER_GUIDE.md: ")
-    add_bullet(" Interactive OpenAPI/Swagger JSON and Markdown specification of all REST endpoints.", "API_DOCUMENTATION.md: ")
-    add_bullet(" Complete line-by-line architectural breakdown of the Room Service and Data Layer.", "RoomService_Micky_Comprehensive_Guide.pdf: ")
-
-    add_h2("3.6 Development Files and Components Excluded from Distribution")
-    add_p("To minimize attack surface, ensure confidentiality, and optimize bundle size, the following development artifacts are strictly excluded from the release package:")
-    add_bullet(" Raw uncompiled React files (reservation-app/src/), development Vite configuration (vite.config.js), package.json, and the massive reservation-app/node_modules/ directory (~250 MB).", "Development Source Files: ")
-    add_bullet(" Unit and integration test suites (test_api_gateway.py, test_room_service.py, test_auth.py), mock fixtures, and .pytest_cache/.", "Testing Suites & Mocks: ")
-    add_bullet(" .git/, .gitignore, .github/ CI workflows, and IDE settings (.vscode/, .gemini/).", "Version Control & IDE Configurations: ")
-    add_bullet(" Intermediate compilation files (__pycache__/, *.pyc, *.pyo, build/, *.spec).", "Build Artifacts & Temporary Caches: ")
+    add_h2("3.4 Documentation and Test Assets")
+    add_bullet(" README.md contains developer setup, demo account details, and Render deployment notes. Do not treat documented demo credentials as production accounts.", "README.md: ")
+    add_bullet(" Lab_Vibranium_Functional_Test_Plan.xlsx contains the detailed functional integration/system cases; Section 6 includes a deployment checklist and functional smoke-test subset.", "Functional test workbook: ")
 
     # =========================================================================
-    # 4. ADDITIONAL CODE REQUIRED FOR DEPLOYMENT
+    # 4. DEPLOYMENT CONFIGURATION
     # =========================================================================
-    add_h1("4. Additional Code Required for Deployment")
-    add_p("To automate deployment across diverse operating systems and package formats, Team Vibranium engineered several dedicated deployment scripts and configuration files:")
+    add_h1("4. Deployment Configuration")
+    add_p("The following files are implemented and used by the current Render deployment. No Docker Compose file, server setup scripts, custom DNS, persistent disk, or cross-platform executable release is part of this demo configuration.")
 
-    add_bullet(" A specialized Python build script that invokes PyInstaller with a custom bytecode constant patch for Python 3.10.0, automatically bundling the React dist/ folder and modular service packages into a single binary.", "build_exe.py: ")
-    add_bullet(" An automated desktop wrapper that detects frozen vs. loose execution modes, sets HTTP no-cache headers on static assets, handles SPA client routing fallbacks (returning index.html on 404), dynamically binds SQLite, and spawns the user's default browser.", "desktop_app.py: ")
-    add_bullet(" A containerization manifest featuring a two-stage build: Stage 1 builds the Vite bundle on Node 20-Alpine; Stage 2 establishes a lightweight Python 3.10-slim runtime hosting Gunicorn on port 5000.", "Dockerfile: ")
-    add_bullet(" Defines service boundaries, port bindings (5000:5000), environment variables, health checks, and persistent volume mounts for app.db.", "docker-compose.yml: ")
-    add_bullet(" A POSIX-compliant shell script for Ubuntu and SuSE Linux that verifies the Python runtime, creates a clean virtual environment, installs requirements.txt, runs database migrations, and initializes the application.", "deploy_setup.sh: ")
-    add_bullet(" A Windows batch script that performs automated environment validation, virtual environment activation, and one-click application launch.", "deploy_setup.bat: ")
-    add_bullet(" An idempotent database seeding script that verifies table existence and populates initial CMKL rooms and test accounts upon deployment.", "Database/seed_data.py: ")
+    add_bullet(" Builds the React production assets with Node.js 22, then installs Python dependencies and runs Gunicorn in a Python 3.12 image.", "Dockerfile: ")
+    add_bullet(" Declares the Render Docker web service, Free plan, /api/health check, and ephemeral DB_PATH=/tmp/app.db.", "render.yaml: ")
+    add_bullet(" Lists the production Python requirements, including Gunicorn, without changing the local development requirements.", "requirements-render.txt: ")
+    add_bullet(" Creates the Flask app with the database location provided through DB_PATH; retains the existing local database default for desktop use.", "wsgi.py and desktop_app.py: ")
+    add_bullet(" Defines the PWA manifest, standalone display, app icons, and service worker. The worker caches the UI shell/static assets and does not cache API responses.", "reservation-app/public/: ")
+    add_bullet(" The Blueprint uses Render's generated HTTPS hostname. DNS records are only needed if the team later configures a custom domain.", "Public URL: ")
 
     # =========================================================================
     # 5. DEPLOYMENT TASKS
     # =========================================================================
     add_h1("5. Deployment Tasks")
-    add_p("The following ordered checklist specifies the exact sequential tasks required to package, verify, and deploy the application for production release:")
+    add_p("This checklist describes the Render Free class-demo release. Complete the PWA changes on the deployment branch before redeploying; use fictional data only because the free-tier SQLite file is ephemeral.")
 
     tasks = [
-        ("Task 1: Pre-Build Quality Gate & Testing", "Execute the complete automated test suite (pytest -v). Verify that all 119/119 unit tests pass across ApiGateway, AuthService, RoomService, ReservationService, and Database modules with zero failures."),
-        ("Task 2: Frontend Production Compilation", "Navigate to reservation-app/ and execute 'npm run build'. Verify that Vite compiles the TypeScript/JSX source into minified assets inside dist/ (index.html, JS bundles, and CSS stylesheets) with zero syntax errors."),
-        ("Task 3: Database Schema Initialization & Seeding", "Execute Database/seed_data.py. Confirm that app.db is initialized with all relational tables (foreign key constraints enabled) and populated with CMKL campus rooms (601-609, Auditorium) and default test user accounts."),
-        ("Task 4: Packaging Standalone Executable", "Execute 'python build_exe.py'. Ensure PyInstaller successfully bundles static assets and Python modules into dist/ClassroomReservationApp.exe (~14.0 MB) with exit code 0."),
-        ("Task 5: Container Image Generation", "Execute 'docker build -t team-vibranium/classroom-reservation:1.0 .'. Verify both build stages complete successfully and that the final image size is optimized (<180 MB)."),
-        ("Task 6: Smoke Testing & Sanity Check", "Deploy the packaged binary on a pristine Windows 10/11 virtual machine and the container on Ubuntu 22.04 LTS. Verify that port 5000 opens, browser auto-launches, authentication functions, and room reservations persist."),
-        ("Task 7: Distribution Kit Archival", "Assemble the final distribution package into ClassroomReservationApp-Release-v1.0.zip containing ClassroomReservationApp.exe, app.db, README.md, and documentation."),
-        ("Task 8: Production Release & Canvas Handover", "Upload the distribution kit to the designated repository release channel and submit the Deployment Plan to the SEN-201 Canvas portal.")
+        ("Task 1: Quality gate", "Run the Python unittest suites and frontend npm run lint / npm run build. Record the actual totals and resolve or document failures before release."),
+        ("Task 2: PWA build check", "Confirm the built dist contains manifest.webmanifest, service-worker.js, and valid 192px/512px PNG icons; verify the manifest and service-worker routes return successfully."),
+        ("Task 3: Publish source", "Commit and push the reviewed deployment/PWA changes to the GitHub branch connected to the Render Blueprint. Do not include app.db or local secrets."),
+        ("Task 4: Review Render Blueprint", "Confirm the Docker service uses the Free plan, /api/health health check, and DB_PATH=/tmp/app.db, with no paid disk or unexpected resource."),
+        ("Task 5: Deploy and check health", "Wait for the Render build to complete and service status to become Live. Open the generated HTTPS URL and verify the frontend and /api/health."),
+        ("Task 6: Test public access and installation", "Open the public URL on a separate network/device; test client browsers and install the PWA shortcut. Record device/browser versions and results."),
+        ("Task 7: Functional regression", "Execute the functional smoke cases in Section 6 and the detailed Lab_Vibranium_Functional_Test_Plan.xlsx. Record pass/fail/not-run evidence."),
+        ("Task 8: Handover and limitations", "Submit the corrected plan and functional test evidence. Tell users the free service may sleep and lose SQLite demo data; do not use it for real reservations.")
     ]
 
     for title, desc in tasks:
         add_p(desc, bold_prefix=title + " — ", space_after=4)
 
     # =========================================================================
-    # 6. DEPLOYMENT TEST PLAN
+    # 6. DEPLOYMENT AND FUNCTIONAL TEST PLAN
     # =========================================================================
-    add_h1("6. Deployment Test Plan")
-    add_p("The Deployment Test Plan defines the formal test cases utilized to ensure that the deployment kit operates correctly across all target operating systems, handles environmental edge cases, and satisfies all architectural constraints.")
+    add_h1("6. Deployment and Functional Test Plan")
+    add_p("Run the deployment checks and the functional smoke subset against the current Render HTTPS URL after the PWA revision is redeployed. These cases are proposed acceptance checks, not pre-filled pass results. Record the tester, date, browser/device/version, actual result, and status. The functional workbook records an earlier run (2026-10-30) with 46 passed, 3 failed, and 1 not run out of 50; rerun the failed and not-run cases against the deployed revision. Use Lab_Vibranium_Functional_Test_Plan.xlsx for detailed functional steps and data.")
 
-    # Table of Test Cases
-    table = doc.add_table(rows=1, cols=4)
-    table.alignment = WD_TABLE_ALIGNMENT.CENTER
-    set_table_borders(table)
-
-    headers = ["Test ID", "Target Platform & Scenario", "Execution Procedure", "Expected Result"]
-    hdr_cells = table.rows[0].cells
-    for i, h_text in enumerate(headers):
-        hdr_cells[i].text = h_text
-        set_cell_background(hdr_cells[i], "1A365D")
-        set_cell_margins(hdr_cells[i], top=140, bottom=140, left=140, right=140)
-        p = hdr_cells[i].paragraphs[0]
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        for run in p.runs:
-            run.font.name = "Arial"
-            run.font.size = Pt(9.5)
-            run.font.bold = True
-            run.font.color.rgb = RGBColor(255, 255, 255)
-
-    test_cases = [
-        ("TC-DEP-01", "Windows 10/11\nClean Installation", "Extract ClassroomReservationApp-Release-v1.0.zip on a clean machine with no Python or Node.js installed. Double-click ClassroomReservationApp.exe.", "Console opens; Flask starts; default web browser automatically launches to http://127.0.0.1:5000; CMKL login modal renders cleanly."),
-        ("TC-DEP-02", "Linux Ubuntu 22.04\nContainer Deployment", "Run 'docker compose up -d' on Ubuntu server. Navigate to host IP:5000 using remote browser.", "Container builds and enters healthy state; port 5000 responds with 200 OK; React frontend loads without console errors."),
-        ("TC-DEP-03", "Linux SuSE Leap 15\nScripted Setup", "Execute './deploy_setup.sh' on openSUSE Leap 15. Verify virtual environment creation and server startup.", "Script successfully detects Python 3, installs dependencies, initializes app.db, and starts background server."),
-        ("TC-DEP-04", "macOS 14/15\nARM64 & Intel", "Execute 'python desktop_app.py' or standalone binary on macOS Sonoma / Sequoia under both M-series and Intel.", "App initializes without architectural binary conflicts; Safari/Chrome opens to reservation dashboard."),
-        ("TC-DEP-05", "Port Conflict Handling\n(Port 5000 In Use)", "Run another process on port 5000, then launch deployment script or set PORT=5050 in environment.", "System detects port conflict gracefully, binds to alternative port or logs an actionable error message instead of crashing silently."),
-        ("TC-DEP-06", "Database State Retention\n& Persistence", "Book a classroom reservation (e.g. Room 604), shut down application/container, restart application.", "Previously created reservation remains visible and intact in app.db; no data loss occurs upon restart."),
-        ("TC-DEP-07", "SPA Deep Linking\n& Static Fallback", "Navigate directly in browser to http://127.0.0.1:5000/schedule or refresh page while on /my-reservations.", "Flask 404 handler serves index.html; React client-side router loads the requested route without blank screen."),
-        ("TC-DEP-08", "Session Persistence\n& Token Expiry", "Sign in as Staff 1, refresh page; simulate expired token or logout.", "Session persists across refresh via localStorage; expired token redirects cleanly to login modal with session cleared.")
-    ]
-
-    for tc_id, plat, proc, exp in test_cases:
-        row_cells = table.add_row().cells
-        data = [tc_id, plat, proc, exp]
-        for i, val in enumerate(data):
-            row_cells[i].text = val
-            set_cell_margins(row_cells[i], top=100, bottom=100, left=120, right=120)
-            if i % 2 == 1:
-                set_cell_background(row_cells[i], "F8FAFC")
-            p = row_cells[i].paragraphs[0]
-            p.paragraph_format.line_spacing = 1.15
+    def add_test_table(headers, cases):
+        table = doc.add_table(rows=1, cols=len(headers))
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        set_table_borders(table)
+        hdr_cells = table.rows[0].cells
+        for i, text in enumerate(headers):
+            hdr_cells[i].text = text
+            set_cell_background(hdr_cells[i], "1A365D")
+            set_cell_margins(hdr_cells[i], top=110, bottom=110, left=90, right=90)
+            p = hdr_cells[i].paragraphs[0]
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             for run in p.runs:
                 run.font.name = "Arial"
-                run.font.size = Pt(8.5)
-                run.font.color.rgb = BODY_DARK
-                if i == 0:
-                    run.font.bold = True
-                    run.font.color.rgb = ACCENT_BLUE
+                run.font.size = Pt(8)
+                run.font.bold = True
+                run.font.color.rgb = RGBColor(255, 255, 255)
 
-    # Set column widths
-    col_widths = [Inches(1.0), Inches(1.6), Inches(2.2), Inches(2.2)]
-    for row in table.rows:
-        for idx, width in enumerate(col_widths):
-            row.cells[idx].width = width
+        for case in cases:
+            row_cells = table.add_row().cells
+            for i, value in enumerate(case):
+                row_cells[i].text = value
+                set_cell_margins(
+                    row_cells[i], top=80, bottom=80, left=90, right=90
+                )
+                if i % 2 == 1:
+                    set_cell_background(row_cells[i], "F8FAFC")
+                p = row_cells[i].paragraphs[0]
+                p.paragraph_format.line_spacing = 1.05
+                for run in p.runs:
+                    run.font.name = "Arial"
+                    run.font.size = Pt(7.5)
+                    run.font.color.rgb = BODY_DARK
+                    if i == 0:
+                        run.font.bold = True
+                        run.font.color.rgb = ACCENT_BLUE
+        widths = [Inches(0.65), Inches(1.1), Inches(2.0), Inches(2.0), Inches(0.75)]
+        for row in table.rows:
+            for idx, width in enumerate(widths):
+                row.cells[idx].width = width
+        return table
+
+    add_h2("6.1 Deployment, Client, DNS, and Installation Checks")
+    deploy_cases = [
+        ("DEP-01", "Public URL / health", "Open the Render HTTPS URL from a separate network. Request /api/health.", "Page loads over HTTPS; API health returns HTTP 200. Render URL works without custom DNS.", "Not run"),
+        ("DEP-02", "Windows browser", "Open the site in current stable Chrome and Edge on Windows 10/11; record versions and inspect console.", "Login UI renders and core controls are usable without uncaught errors.", "Not run"),
+        ("DEP-03", "macOS browser", "Open the site in current stable Safari and Chrome on macOS 14/15; record versions.", "Login UI renders and core controls are usable without uncaught errors.", "Not run"),
+        ("DEP-04", "Mobile browser", "Open the URL on Android Chrome and iOS/iPadOS Safari; check room cards and timetable viewport.", "Content remains usable at mobile width; no horizontal clipping blocks essential actions.", "Not run"),
+        ("DEP-05", "PWA installation", "Check manifest and 192/512 icons in browser DevTools. Install from Edge/Chrome menu; on iOS use Safari Share > Add to Home Screen.", "Name/icon are shown; installed shortcut opens the HTTPS app in a standalone window. Installation is browser-managed, not a native installer.", "Not run"),
+        ("DEP-06", "PWA offline behavior", "After online load, disable network and reopen the installed app; try loading cached UI and making a booking.", "Cached shell/static assets may render. API booking requires network; no offline write/sync is promised.", "Not run"),
+        ("DEP-07", "Refresh / route fallback", "Refresh the app and open a client-side fallback URL directly.", "The frontend shell loads; API unknown routes remain JSON 404 responses.", "Not run"),
+        ("DEP-08", "Free service wake-up", "Leave the service idle long enough to sleep, then open the HTTPS URL.", "Service wakes and responds; initial request may be delayed by the free-tier cold start.", "Not run"),
+        ("DEP-09", "Ephemeral demo data", "Create a fictional reservation. Document the current record, then restart/redeploy only if safe to lose demo data.", "Do not assert persistence: /tmp/app.db is ephemeral and records may disappear after sleep, restart, or redeploy.", "Not run"),
+        ("DEP-10", "Custom DNS (optional)", "Only if a team-owned domain is configured: add it in Render and publish the exact DNS record Render supplies; verify HTTPS.", "Custom hostname resolves and serves HTTPS. Otherwise the generated onrender.com URL is the supported public address.", "Optional"),
+    ]
+    add_test_table(
+        ["ID", "Scenario", "Procedure", "Expected Result", "Status"],
+        deploy_cases,
+    )
+
+    add_h2("6.2 Functional Regression Smoke Tests")
+    add_p("Run these functional checks with fictional data. They supplement, not replace, the detailed functional cases and results in the workbook.")
+    functional_cases = [
+        ("FUN-01", "Authentication / roles", "Log in once as Staff and once as Professor using approved demo accounts; sign out between users.", "Each valid role reaches the app; invalid credentials are rejected; sign-out clears the session.", "Not run"),
+        ("FUN-02", "Role permissions", "As Professor, attempt a staff-only room mutation; repeat permitted room browsing as Staff.", "Professor is denied staff-only changes; Staff can manage rooms.", "Not run"),
+        ("FUN-03", "Room search", "Filter by a group size/equipment/date, then request a room recommendation.", "Only eligible rooms are returned and recommendation fits constraints.", "Not run"),
+        ("FUN-04", "Reservation creation", "Create a valid fictional booking and view it in My Reservations and the schedule.", "Booking appears with the selected room, time, group size, and competency.", "Not run"),
+        ("FUN-05", "Conflict / capacity", "Attempt an overlapping booking in the same room and a group larger than room capacity.", "Conflicting and over-capacity bookings are rejected with a clear error.", "Not run"),
+        ("FUN-06", "Closures / export", "As Staff, close a room for a date range; verify availability, then view/export a weekly schedule.", "Closed room is unavailable during the closure; schedule and text export show the expected bookings.", "Not run"),
+        ("FUN-07", "Restart persistence", "Run only on a separately configured persistent-data deployment: create a fictional booking and restart.", "Booking remains after restart only when a persistent database is configured. Not applicable to the current Free /tmp database.", "Not applicable"),
+    ]
+    add_test_table(
+        ["ID", "Scenario", "Procedure", "Expected Result", "Status"],
+        functional_cases,
+    )
 
     # Save document
     output_filename = "Deployment_Plan_Team_Vibranium.docx"

@@ -29,6 +29,7 @@ class TestDesktopApp(unittest.TestCase):
             "no-cache, no-store, must-revalidate",
         )
         self.assertEqual(res.headers.get("Pragma"), "no-cache")
+        res.close()
 
     def test_gateway_health_accessible_at_api_health(self) -> None:
         """Gateway health check remains accessible on /api/health."""
@@ -46,6 +47,34 @@ class TestDesktopApp(unittest.TestCase):
         res = self.client.get("/rooms")
         self.assertEqual(res.status_code, 200)
         self.assertIn("text/html", res.content_type)
+
+    def test_pwa_manifest_is_served(self) -> None:
+        """PWA metadata is available to supported browsers."""
+        res = self.client.get("/manifest.webmanifest")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(
+            res.get_json()["display"],
+            "standalone",
+        )
+        res.close()
+
+    def test_service_worker_has_root_scope_and_no_cache(self) -> None:
+        """The browser can install and update the app service worker."""
+        res = self.client.get("/service-worker.js")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("javascript", res.content_type)
+        self.assertEqual(res.headers["Cache-Control"], "no-cache")
+        self.assertEqual(res.headers["Service-Worker-Allowed"], "/")
+        res.close()
+
+    def test_pwa_icons_are_served(self) -> None:
+        """Both required PWA icon sizes are accessible."""
+        for size in (192, 512):
+            with self.subTest(size=size):
+                res = self.client.get(f"/icons/icon-{size}.png")
+                self.assertEqual(res.status_code, 200)
+                self.assertEqual(res.content_type, "image/png")
+                res.close()
 
     def test_api_404_returns_json_error(self) -> None:
         """Unrecognized /api/* routes return 404 JSON instead of HTML."""

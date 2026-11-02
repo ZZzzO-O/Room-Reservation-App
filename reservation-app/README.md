@@ -25,6 +25,18 @@ so the UI still works for demos.
 
 Other scripts: `npm run lint`, `npm run build` (output in `dist/`, which `desktop_app.py` serves).
 
+## Open or install the hosted web app
+
+Open the Render HTTPS URL in a supported browser; no client-side Python, Node.js,
+or Docker installation is needed. On desktop Chrome/Edge, choose **Install app**
+or **Create shortcut** in the browser menu. On Android Chrome choose **Install
+app** or **Add to Home screen**. On iPhone/iPad, use Safari's **Share → Add to
+Home Screen** option.
+
+The web manifest and icons provide the install experience. A service worker
+caches the application shell and static assets, but the backend API requires an
+internet connection. It does not provide offline reservation synchronization.
+
 ## Test accounts
 
 | Email               | Password    | Role      |

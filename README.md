@@ -102,6 +102,15 @@ Do not use this deployment for important or real reservations. Persistent
 storage requires a paid service. Remove or secure demo account seeding and
 offline frontend fallbacks before using this deployment for real users.
 
+### Open or install the web app
+
+Open the Render HTTPS URL in a supported browser; installing is optional.
+Desktop Chrome/Edge users can choose **Install app** or **Create shortcut** in
+the browser menu. Android Chrome offers **Install app** or **Add to Home
+screen**; on iPhone/iPad, open the URL in Safari and select **Share → Add to
+Home Screen**. The PWA caches the application shell and static assets, but
+reservations and other API operations require a network connection.
+
 ---
 
 ## REST API Endpoints

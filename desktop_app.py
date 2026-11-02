@@ -106,6 +106,21 @@ def setup_desktop_app() -> Tuple[Flask, str]:
         def serve_dist_svg(file):
             return send_from_directory(dist_dir, f"{file}.svg")
 
+        @app.route("/manifest.webmanifest")
+        def serve_web_manifest():
+            return send_from_directory(dist_dir, "manifest.webmanifest")
+
+        @app.route("/service-worker.js")
+        def serve_service_worker():
+            response = send_from_directory(dist_dir, "service-worker.js")
+            response.headers["Cache-Control"] = "no-cache"
+            response.headers["Service-Worker-Allowed"] = "/"
+            return response
+
+        @app.route("/icons/<path:filename>")
+        def serve_pwa_icons(filename):
+            return send_from_directory(dist_dir / "icons", filename)
+
         # Fallback 404 to index.html for client-side routes (e.g. /login)
         @app.errorhandler(404)
         def handle_spa_fallback(_error):
