@@ -114,7 +114,8 @@ export async function fetchReservations(roomId) {
       return list;
     }
     throw new Error(`Server responded with ${response.status}`);
-  } catch {
+  } catch (err) {
+    if (!import.meta.env.DEV) throw err;
     const list = getLocalReservations();
     return roomId ? list.filter((r) => r.room_id === roomId) : list;
   }
@@ -151,6 +152,7 @@ export async function createReservation(candidate) {
     }
     return data.reservation;
   } catch (err) {
+    if (!import.meta.env.DEV) throw err;
     if (err.message && !err.message.includes('fetch')) {
       throw err;
     }
@@ -204,6 +206,7 @@ export async function editReservation(reservationId, updateData) {
     }
     return data.reservation;
   } catch (err) {
+    if (!import.meta.env.DEV) throw err;
     if (err.message && !err.message.includes('fetch')) {
       throw err;
     }
@@ -234,6 +237,7 @@ export async function deleteReservation(reservationId) {
       throw new Error(data.error || 'Reservation could not be found or has already been deleted.');
     }
   } catch (err) {
+    if (!import.meta.env.DEV) throw err;
     if (err.message && !err.message.includes('fetch')) {
       throw err;
     }
@@ -259,12 +263,14 @@ export async function fetchSchedule(weekStart, roomId) {
     if (roomId) url += `&room_id=${encodeURIComponent(roomId)}`;
 
     const response = await fetch(url, { headers: getAuthHeaders() });
-    if (response.ok) {
-      const data = await response.json();
-      return data.schedule || [];
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to load schedule.');
     }
-  } catch {
-    // Local fallback
+    return data.schedule || [];
+  } catch (err) {
+    if (!import.meta.env.DEV) throw err;
+    // Local fallback in development.
   }
 
   // Filter local reservations by room and week range
@@ -298,7 +304,9 @@ export async function exportScheduleReport(weekStart, roomId) {
       window.URL.revokeObjectURL(downloadUrl);
       return;
     }
-  } catch {
+    throw new Error(`Server responded with ${response.status}`);
+  } catch (err) {
+    if (!import.meta.env.DEV) throw err;
     // Generate text report on client side if offline
   }
 

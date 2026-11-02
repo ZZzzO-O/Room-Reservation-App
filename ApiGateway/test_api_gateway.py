@@ -9,6 +9,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR / "ApiGateway"))
@@ -70,6 +71,20 @@ class GatewayTestCase(unittest.TestCase):
             json={**RESERVATION, **changes},
             headers=self.staff,
         )
+
+
+class TestProductionConfiguration(unittest.TestCase):
+    """Production startup must not create documented test accounts."""
+
+    def test_production_does_not_seed_demo_users(self) -> None:
+        with patch.dict(os.environ, {"APP_ENV": "production"}):
+            app = create_app(":memory:")
+
+        try:
+            self.assertEqual(app.config["STATE"].auth.users, {})
+            self.assertEqual(app.config["STATE"].rooms, {})
+        finally:
+            app.config["STATE"].conn.close()
 
 
 class TestAuthRoutes(GatewayTestCase):

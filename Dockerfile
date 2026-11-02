@@ -13,4 +13,5 @@ COPY . .
 COPY --from=frontend /build/dist /app/reservation-app/dist
 
 ENV DB_PATH=/var/data/app.db
+ENV APP_ENV=production
 CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-10000} --workers 1 wsgi:app"]

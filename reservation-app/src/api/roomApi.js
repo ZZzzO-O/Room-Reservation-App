@@ -265,7 +265,8 @@ export async function fetchRooms() {
       return list;
     }
     throw new Error(`Server responded with ${response.status}`);
-  } catch {
+  } catch (err) {
+    if (!import.meta.env.DEV) throw err;
     return getLocalRooms();
   }
 }
@@ -336,6 +337,7 @@ export async function createRoom(roomData) {
     }
     return normalizeRoom(data.room);
   } catch (err) {
+    if (!import.meta.env.DEV) throw err;
     if (err.message && !err.message.includes('fetch')) {
       throw err;
     }
@@ -380,6 +382,7 @@ export async function editRoom(roomId, roomData) {
     }
     return normalizeRoom(data.room);
   } catch (err) {
+    if (!import.meta.env.DEV) throw err;
     if (err.message && !err.message.includes('fetch')) {
       throw err;
     }
@@ -411,6 +414,7 @@ export async function deleteRoom(roomId, reservations = []) {
       throw new Error(data.error || 'Failed to delete room.');
     }
   } catch (err) {
+    if (!import.meta.env.DEV) throw err;
     if (err.message && !err.message.includes('fetch')) {
       throw err;
     }
@@ -451,6 +455,7 @@ export async function markRoomUnavailable(roomId, payload) {
     }
     return data.unavailable_period;
   } catch (err) {
+    if (!import.meta.env.DEV) throw err;
     if (err.message && !err.message.includes('fetch')) {
       throw err;
     }
@@ -491,6 +496,7 @@ export async function updateRoomUnavailable(roomId, periodId, payload) {
     }
     return data.unavailable_period;
   } catch (err) {
+    if (!import.meta.env.DEV) throw err;
     if (err.message && !err.message.includes('fetch')) {
       throw err;
     }
@@ -528,6 +534,7 @@ export async function removeRoomUnavailable(roomId, periodId) {
       throw new Error(data.error || 'Failed to remove room closure.');
     }
   } catch (err) {
+    if (!import.meta.env.DEV) throw err;
     if (err.message && !err.message.includes('fetch')) {
       throw err;
     }

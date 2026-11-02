@@ -11,7 +11,7 @@ const USER_STORAGE_KEY = 'vibranium_auth_user';
 /**
  * Test accounts from the Vibranium Functional Test Plan.
  */
-export const SEED_USERS = [
+export const SEED_USERS = import.meta.env.DEV ? [
   {
     email: 'staff1@cmkl.ac.th',
     password: 'Test@1234',
@@ -32,7 +32,7 @@ export const SEED_USERS = [
       role: 'Professor',
     },
   },
-];
+] : [];
 
 /**
  * Retrieve the active session token from browser localStorage.
@@ -129,6 +129,10 @@ export async function loginUser(email, password) {
     setStoredSession(data.token, data.user);
     return data;
   } catch (err) {
+    if (!import.meta.env.DEV) {
+      throw err;
+    }
+
     // Backend refused or offline: fall back to the test accounts
     const matched = SEED_USERS.find(
       (entry) => entry.email.toLowerCase() === trimmedEmail.toLowerCase()
@@ -196,7 +200,15 @@ export async function fetchCurrentUser() {
       return null;
     }
   } catch {
-    // Return cached user if backend is momentarily unreachable
+    if (!import.meta.env.DEV) {
+      clearStoredSession();
+      return null;
+    }
+    // Return cached user if backend is momentarily unreachable in development.
+  }
+  if (!import.meta.env.DEV) {
+    clearStoredSession();
+    return null;
   }
   return getStoredUser();
 }

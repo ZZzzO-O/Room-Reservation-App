@@ -11,9 +11,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 import hashlib
 import secrets
-import sqlite3
 from types import ModuleType
-from typing import Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, Optional, Tuple
+
+if TYPE_CHECKING:
+    from database import DatabaseConnection
 
 ROLE_STAFF = "Staff"
 ROLE_PROFESSOR = "Professor"
@@ -126,14 +128,16 @@ def normalize_email(email: str) -> str:
 class AuthService:
     """Owns User Data and sessions; the API gateway only calls its methods."""
 
-    def __init__(self, conn: Optional[sqlite3.Connection] = None) -> None:
+    def __init__(
+        self, conn: Optional["DatabaseConnection"] = None
+    ) -> None:
         """
         Load users and sessions from SQLite, or start empty in memory.
 
-        Sample accounts are added separately by seed_users.py.
+        Sample accounts are added separately by seed_users.py in development.
 
         Args:
-            conn (Optional[sqlite3.Connection]): Database, or None.
+            conn (Optional[DatabaseConnection]): Database, or None.
         """
         self.conn = conn
         self.users: Dict[str, User] = {}

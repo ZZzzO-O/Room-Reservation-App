@@ -45,7 +45,10 @@ def setup_desktop_app() -> Tuple[Flask, str]:
         default_db_file = exe_dir / "app.db"
     else:
         default_db_file = BASE_DIR / "app.db"
-    db_file = os.environ.get("DB_PATH", str(default_db_file))
+    db_file = os.environ.get(
+        "DATABASE_URL",
+        os.environ.get("DB_PATH", str(default_db_file)),
+    )
 
     app = create_app(db_path=db_file)
     dist_dir = BASE_DIR / "reservation-app" / "dist"

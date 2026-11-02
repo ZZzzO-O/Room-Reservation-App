@@ -9,11 +9,11 @@ import { loginUser } from '../api/authApi';
 import ModalShell from './ModalShell';
 import { LABEL, INPUT, BTN_PRIMARY, BTN_SECONDARY, ERROR_BOX } from '../utils/styles';
 
-const DEMO_PASSWORD = 'Test@1234';
-const DEMO_ACCOUNTS = [
+const DEMO_PASSWORD = import.meta.env.DEV ? 'Test@1234' : '';
+const DEMO_ACCOUNTS = import.meta.env.DEV ? [
   { id: 'demo-login-staff', label: 'Staff 1', email: 'staff1@cmkl.ac.th' },
   { id: 'demo-login-prof', label: 'Professor 1', email: 'prof1@cmkl.ac.th' },
-];
+] : [];
 
 /**
  * Authentication modal dialog for signing into the application.
@@ -89,9 +89,10 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
           />
         </div>
 
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          Test accounts:{' '}
-          {DEMO_ACCOUNTS.map((account, idx) => (
+        {DEMO_ACCOUNTS.length > 0 && (
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Test accounts:{' '}
+            {DEMO_ACCOUNTS.map((account, idx) => (
             <React.Fragment key={account.id}>
               {idx > 0 && ' · '}
               <button
@@ -103,8 +104,9 @@ export default function LoginModal({ isOpen, onClose, onLoginSuccess }) {
                 {account.label}
               </button>
             </React.Fragment>
-          ))}
-        </p>
+            ))}
+          </p>
+        )}
 
         <div className="pt-1 flex justify-end gap-2">
           <button

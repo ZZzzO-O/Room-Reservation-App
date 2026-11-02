@@ -20,8 +20,9 @@ npm run dev                           # http://localhost:5173
 ```
 
 `vite.config.js` proxies `/api/*` to port 5000, so the browser only talks to the dev server.
-If the backend isn't running, the API modules fall back to seed data kept in `localStorage`,
-so the UI still works for demos.
+In development, if the backend isn't running, the API modules fall back to seed
+data kept in `localStorage`, so the UI still works for demos. Production builds
+do not use local fallback data.
 
 Other scripts: `npm run lint`, `npm run build` (output in `dist/`, which `desktop_app.py` serves).
 
@@ -37,7 +38,7 @@ The web manifest and icons provide the install experience. A service worker
 caches the application shell and static assets, but the backend API requires an
 internet connection. It does not provide offline reservation synchronization.
 
-## Test accounts
+## Development test accounts
 
 | Email               | Password    | Role      |
 | ------------------- | ----------- | --------- |
@@ -52,7 +53,7 @@ Staff can add, edit, close and delete rooms. Both roles can book.
 src/
   App.jsx              view switching, current user, rooms + reservations state
   api/                 fetch wrappers for /api/auth, /api/rooms, /api/reservations
-                       (each has a localStorage fallback and the seed data)
+                       (development-only localStorage fallback and seed data)
   components/
     ModalShell.jsx     shared dialog frame: overlay, title, Escape to close
     NavBar.jsx, RoomCard.jsx, *Modal.jsx

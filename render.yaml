@@ -9,3 +9,5 @@ services:
     envVars:
       - key: DB_PATH
         value: /tmp/app.db
+      - key: APP_ENV
+        value: development

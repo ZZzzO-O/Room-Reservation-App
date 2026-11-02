@@ -25,7 +25,8 @@ don't fit.
 - **Recommendation**: suggests the smallest room that fits the group.
 - **Reservations**: create, edit and delete bookings; overlapping times and over-capacity groups are rejected.
 - **Weekly schedule**: timetable view (parallel classes in different rooms are fine) with a plain-text export.
-- **Storage**: SQLite (`app.db`), so data survives restarts.
+- **Storage**: SQLite for local development; PostgreSQL is supported for a
+  hosted deployment through `DATABASE_URL`.
 
 ---
 
@@ -46,7 +47,7 @@ don't fit.
     │                                  │
     └─────────────────┬────────────────┘
                       ▼
-            [ SQLite DB (app.db) ]
+       [ SQLite locally / PostgreSQL when hosted ]
 ```
 
 ---
@@ -99,8 +100,17 @@ private data. The free service uses an ephemeral SQLite path: reservations
 may be lost when Render spins the service down, restarts it, or deploys a new
 version. The service may also take about a minute to wake after inactivity.
 Do not use this deployment for important or real reservations. Persistent
-storage requires a paid service. Remove or secure demo account seeding and
-offline frontend fallbacks before using this deployment for real users.
+storage requires a paid service. Production builds disable demo login shortcuts
+and client-side fallback data. The Render demo remains configured for
+development-mode sample accounts.
+
+## Azure deployment preparation
+
+The app now supports Azure Database for PostgreSQL and can run without
+published demo accounts. Azure resources have not been created or deployed:
+that requires an Azure subscription and approval of ongoing resource costs.
+See [AZURE_DEPLOYMENT.md](AZURE_DEPLOYMENT.md) for the architecture,
+configuration, account provisioning, and the remaining manual steps.
 
 ### Open or install the web app
 
@@ -145,7 +155,7 @@ reservations and other API operations require a network connection.
 
 ## Testing & Quality Assurance
 
-### Run all 129 unit tests
+### Run all 159 unit tests
 ```bash
 python -m unittest discover -s RoomService -p "test_*.py"
 python -m unittest discover -s AuthService -p "test_*.py"

@@ -15,7 +15,6 @@ from datetime import date, time
 from functools import wraps
 import os
 from pathlib import Path
-import sqlite3
 import sys
 from typing import Any, Callable, Dict, Optional, Tuple
 
@@ -74,7 +73,7 @@ class AppState:
     rooms: Dict[str, rs.Room]
     reservations: rdata.ReservationRepository
     booking: rservice.ReservationService
-    conn: sqlite3.Connection
+    conn: db.DatabaseConnection
 
 
 class RoomCapacityLookup:
@@ -837,18 +836,21 @@ def register_error_handlers(app: Flask) -> None:
         }), 409
 
 
-def load_data(conn: sqlite3.Connection) -> AppState:
+def load_data(conn: db.DatabaseConnection) -> AppState:
     """
     Load all data from SQLite, adding sample rooms and users if empty.
 
     Args:
-        conn (sqlite3.Connection): Open database.
+        conn (DatabaseConnection): Open database.
 
     Returns:
         AppState: All services, ready to use.
     """
+    is_production = (
+        os.environ.get("APP_ENV", "development").lower() == "production"
+    )
     rooms = db.load_rooms(conn)
-    if not rooms:
+    if not rooms and not is_production:
         load_cmkl_rooms(rooms)
         for room in rooms.values():
             db.save_room(conn, room)
@@ -858,10 +860,8 @@ def load_data(conn: sqlite3.Connection) -> AppState:
         reservations.add_reservation(res)
 
     auth_service = auth.AuthService(conn)
-    # These are documented development/test-plan accounts. Refresh them even
-    # when the database already contains users so old local data cannot leave
-    # their advertised credentials unusable.
-    load_test_users(auth_service)
+    if not is_production:
+        load_test_users(auth_service)
 
     return AppState(
         auth=auth_service,
@@ -874,18 +874,20 @@ def load_data(conn: sqlite3.Connection) -> AppState:
     )
 
 
-def create_app(db_path: str = DEFAULT_DB_PATH) -> Flask:
+def create_app(db_path: Optional[str] = None) -> Flask:
     """
     Build the Flask app.
 
     Args:
-        db_path (str): SQLite file, or ":memory:" for a throwaway database
-            (used by tests).
+        db_path (Optional[str]): SQLite file, PostgreSQL URL, or ":memory:"
+            for tests. DATABASE_URL takes precedence when configured.
 
     Returns:
         Flask: The configured app.
     """
-    conn = db.get_connection(db_path)
+    conn = db.get_connection(
+        db_path or os.environ.get("DATABASE_URL") or DEFAULT_DB_PATH
+    )
     db.init_db(conn)
 
     app = Flask(__name__)
