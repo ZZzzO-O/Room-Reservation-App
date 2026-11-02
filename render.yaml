@@ -2,10 +2,10 @@ services:
   - type: web
     name: room-reservation-app
     runtime: docker
+    plan: free
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /api/health
-    disk:
-      name: room-reservation-data
-      mountPath: /var/data
-      sizeGB: 1
+    envVars:
+      - key: DB_PATH
+        value: /tmp/app.db
