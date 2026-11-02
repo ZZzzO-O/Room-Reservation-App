@@ -66,9 +66,10 @@ limits.
       this registry; do not share or commit these values.
    2. In GitHub, open the repository's
       **Settings → Secrets and variables → Actions → New repository secret**.
-      Add secrets named `ACR_LOGIN_SERVER`, `ACR_USERNAME`, and
-      `ACR_PASSWORD` using the copied values. Never paste these credentials
-      into chat, source files, or a workflow run.
+      Add secrets named `ACR_USERNAME` and `ACR_PASSWORD` using the copied
+      values. The workflow already specifies the registry's non-secret login
+      server, `roomreservation9692.azurecr.io`. Never paste credentials into
+      chat, source files, or a workflow run.
    3. Push the workflow to the repository's `main` branch. In the GitHub
       repository, open **Actions → Build and publish container image** and
       confirm the run succeeds. The workflow publishes
