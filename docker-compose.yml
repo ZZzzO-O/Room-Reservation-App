@@ -4,7 +4,7 @@ services:
   app:
     build: .
     ports:
-      - "5000:10000"          # browser uses :5000, the container listens on 10000
+      - "127.0.0.1:5000:10000" # local-only; container listens on 10000
     environment:
       APP_ENV: development    # seeds sample rooms and test accounts for local testing
       DB_PATH: /var/data/app.db
