@@ -1,0 +1,21 @@
+# file: docker-compose.yml
+# purpose: Run the app as one container on any Docker host (TC-DEP-02)
+services:
+  app:
+    build: .
+    ports:
+      - "127.0.0.1:5000:10000" # local-only; container listens on 10000
+    environment:
+      APP_ENV: development    # seeds sample rooms and test accounts for local testing
+      DB_PATH: /var/data/app.db
+    volumes:
+      - appdata:/var/data     # keeps app.db when the container is rebuilt
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  appdata:
